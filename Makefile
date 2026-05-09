@@ -44,11 +44,11 @@ test-property: ## Run only property-based tests
 
 .PHONY: lint
 lint: ## Run ESLint
-	npx eslint src/ tests/ --ext .ts --max-warnings 0
+	npx eslint src/ tests/ --max-warnings 0
 
 .PHONY: lint-fix
 lint-fix: ## Run ESLint with auto-fix
-	npx eslint src/ tests/ --ext .ts --fix
+	npx eslint src/ tests/ --fix
 
 .PHONY: typecheck
 typecheck: ## Run TypeScript type checking (no emit)
