@@ -24,8 +24,8 @@ jobs:
       - name: Install + Typecheck + Lint + Test + Audit + Build
         run: make ci
 
-      - name: Security scan
-        run: make security
+      - name: Security scan (npm audit)
+        run: make audit
 
       - name: Upload build artifacts
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
