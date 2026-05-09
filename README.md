@@ -1,5 +1,7 @@
 # Obsidian Cloud KMS Encryption
 
+[![Known Vulnerabilities](https://snyk.io/test/github/ViktorUJ/obsidian-cloud-kms/badge.svg)](https://snyk.io/test/github/ViktorUJ/obsidian-cloud-kms)
+
 Плагин для [Obsidian](https://obsidian.md), обеспечивающий **file-level шифрование** заметок и вложений с использованием облачных KMS-сервисов (AWS KMS, Azure Key Vault, Google Cloud KMS).
 
 ## Зачем
