@@ -1,9 +1,6 @@
-FROM node:20-slim
+FROM node:20.20.2-alpine3.23
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    make \
-    git \
-    && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache make git bash
 
 WORKDIR /app
 
