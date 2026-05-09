@@ -1,0 +1,35 @@
+{
+  "name": "cloud-kms-encryption",
+  "version": "0.1.0",
+  "description": "Obsidian plugin for file-level envelope encryption using Cloud KMS services",
+  "main": "main.js",
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "node esbuild.config.mjs production",
+    "test": "vitest --run",
+    "test:watch": "vitest",
+    "test:property": "vitest --run tests/property"
+  },
+  "keywords": [
+    "obsidian",
+    "encryption",
+    "kms",
+    "aws",
+    "envelope-encryption"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@aws-sdk/client-kms": "3.1045.0",
+    "@aws-sdk/credential-provider-ini": "3.972.38"
+  },
+  "devDependencies": {
+    "@types/node": "22.15.18",
+    "esbuild": "0.25.4",
+    "eslint": "^10.3.0",
+    "fast-check": "4.7.0",
+    "obsidian": "1.12.3",
+    "typescript": "5.8.3",
+    "typescript-eslint": "^8.59.2",
+    "vitest": "3.2.1"
+  }
+}
