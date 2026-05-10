@@ -16,6 +16,7 @@ import {
 import { EncryptionContext, GenerateDataKeyResult, ProviderAdapter } from '../types';
 import { PluginError } from './errors';
 import { KMS_TIMEOUT_MS } from '../constants';
+import { extractRegionFromArn } from '../utils/arn-validator';
 
 /**
  * Convert an EncryptionContext to the Record<string, string> format expected by KMS API.
@@ -106,9 +107,38 @@ function mapAwsError(err: unknown, cmkId: string): PluginError {
     );
   }
 
-  // Default: crypto category
+  // Key not found or invalid state
+  if (
+    name === 'NotFoundException' ||
+    name === 'DisabledException' ||
+    name === 'KMSInvalidStateException' ||
+    name === 'InvalidKeyState'
+  ) {
+    return new PluginError(
+      `AWS KMS key unavailable (${name}) for key ${cmkId}: ${message}`,
+      'validation',
+      'aws-kms',
+      cmkId,
+      undefined,
+      error
+    );
+  }
+
+  // Invalid ARN or key ID format
+  if (name === 'InvalidArnException' || name === 'ValidationException') {
+    return new PluginError(
+      `AWS KMS invalid key identifier ${cmkId}: ${message}`,
+      'validation',
+      'aws-kms',
+      cmkId,
+      undefined,
+      error
+    );
+  }
+
+  // Default: crypto category — include the original error name for debugging
   return new PluginError(
-    `AWS KMS error for key ${cmkId}: ${message}`,
+    `AWS KMS error for key ${cmkId} [${name || 'unknown'}]: ${message}`,
     'crypto',
     'aws-kms',
     cmkId,
@@ -126,12 +156,34 @@ function mapAwsError(err: unknown, cmkId: string): PluginError {
 export class AwsKmsAdapter implements ProviderAdapter {
   public readonly providerId = 'aws-kms';
 
-  private readonly client: KMSClient;
+  private readonly clientFactory: (region?: string) => KMSClient;
+  private readonly clientCache: Map<string, KMSClient> = new Map();
   private readonly timeoutMs: number;
 
   constructor(client?: KMSClient, timeoutMs?: number) {
-    this.client = client ?? new KMSClient({});
+    if (client) {
+      // If an explicit client is provided (e.g. for testing), always use it
+      this.clientFactory = () => client;
+    } else {
+      this.clientFactory = (region?: string) => new KMSClient(region ? { region } : {});
+    }
     this.timeoutMs = timeoutMs ?? KMS_TIMEOUT_MS;
+  }
+
+  /**
+   * Get or create a KMSClient for the region extracted from the CMK ARN.
+   * Falls back to default credential chain region if ARN parsing fails.
+   */
+  private getClient(cmkId: string): KMSClient {
+    const region = extractRegionFromArn(cmkId);
+    const cacheKey = region ?? '__default__';
+
+    let client = this.clientCache.get(cacheKey);
+    if (!client) {
+      client = this.clientFactory(region);
+      this.clientCache.set(cacheKey, client);
+    }
+    return client;
   }
 
   /**
@@ -152,7 +204,7 @@ export class AwsKmsAdapter implements ProviderAdapter {
         EncryptionContext: toKmsEncryptionContext(context),
       });
 
-      const response = await this.client.send(command, {
+      const response = await this.getClient(cmkId).send(command, {
         abortSignal: abortController.signal,
       });
 
@@ -194,7 +246,7 @@ export class AwsKmsAdapter implements ProviderAdapter {
         EncryptionContext: toKmsEncryptionContext(context),
       });
 
-      const response = await this.client.send(command, {
+      const response = await this.getClient(cmkId).send(command, {
         abortSignal: abortController.signal,
       });
 
@@ -234,7 +286,7 @@ export class AwsKmsAdapter implements ProviderAdapter {
         EncryptionContext: toKmsEncryptionContext(context),
       });
 
-      const response = await this.client.send(command, {
+      const response = await this.getClient(cmkId).send(command, {
         abortSignal: abortController.signal,
       });
 
@@ -278,7 +330,7 @@ export class AwsKmsAdapter implements ProviderAdapter {
         KeyId: cmkId,
       });
 
-      await this.client.send(command, {
+      await this.getClient(cmkId).send(command, {
         abortSignal: abortController.signal,
       });
     } catch (err) {

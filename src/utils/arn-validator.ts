@@ -41,3 +41,20 @@ export function validateAwsKmsArn(arn: string): ArnValidationResult {
 
   return { valid: true };
 }
+
+/**
+ * Extract the AWS region from a KMS key ARN.
+ *
+ * ARN format: arn:aws:kms:{region}:{account-id}:key/{key-id}
+ *
+ * @param arn - A valid AWS KMS key ARN
+ * @returns The region string, or undefined if the ARN is malformed
+ */
+export function extractRegionFromArn(arn: string): string | undefined {
+  const parts = arn.split(':');
+  // arn:aws:kms:region:account:key/id → parts[3] is region
+  if (parts.length >= 6 && parts[0] === 'arn' && parts[2] === 'kms') {
+    return parts[3] || undefined;
+  }
+  return undefined;
+}
