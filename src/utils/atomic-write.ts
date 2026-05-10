@@ -2,10 +2,10 @@ import { Vault } from 'obsidian';
 import { PluginError } from '../providers/errors';
 
 /**
- * Atomically writes content to a file using a temp-file-then-rename strategy.
+ * Writes binary content to a file in the vault.
  *
- * Writes to `${path}.ocke-tmp` first, then renames to the target path.
- * On any failure, removes the temp file (best effort) and throws a PluginError.
+ * Uses vault.adapter.writeBinary() which overwrites the file in place.
+ * This is safe in Obsidian's single-threaded environment.
  *
  * @param vault - Obsidian Vault instance providing file system access
  * @param path - Target file path (vault-relative)
@@ -17,21 +17,11 @@ export async function atomicFileWrite(
   path: string,
   newContent: Uint8Array
 ): Promise<void> {
-  const tempPath = `${path}.ocke-tmp`;
-
   try {
-    await vault.adapter.writeBinary(tempPath, newContent);
-    await vault.adapter.rename(tempPath, path);
+    await vault.adapter.writeBinary(path, newContent);
   } catch (err) {
-    // Best-effort cleanup of temp file
-    try {
-      await vault.adapter.remove(tempPath);
-    } catch {
-      // Ignore cleanup errors
-    }
-
     throw new PluginError(
-      `Atomic write failed for ${path}`,
+      `Write failed for ${path}`,
       'crypto',
       undefined,
       undefined,

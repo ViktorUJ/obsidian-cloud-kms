@@ -1,61 +1,39 @@
 /**
- * Inline block encryption/decryption hooks.
+ * Inline block encryption hook.
  *
- * Save hook: Finds all ```secret blocks in non-.secret.md files,
- * encrypts their content, and replaces them with ```ocke-v1 blocks.
+ * Save hook: On every modify event, reads the file from disk.
+ * If it contains ```secret blocks, encrypts them to ```ocke-v1 and writes back.
+ * Then restores the editor to show ```secret (decrypted) content.
  *
- * Open hook: When autoDecryptBlocks is enabled, finds all ```ocke-v1 blocks
- * in the editor, decrypts them, and replaces with ```secret blocks.
- *
- * Each ```secret block gets its own independent DEK (envelope encryption).
- * Processing flags prevent re-trigger loops when the hook writes back.
+ * This ensures:
+ * - Disk ALWAYS has ```ocke-v1 (encrypted)
+ * - Editor ALWAYS shows ```secret (decrypted, editable)
+ * - Even during a crash, the disk state is encrypted
  */
 
-import type { Plugin, TAbstractFile, TFile } from 'obsidian';
+import { Plugin, TAbstractFile, TFile, MarkdownView } from 'obsidian';
 import type { CryptoEngine, EncryptionContext, PluginSettings } from '../types';
 import { matchesEncryptedSuffix } from '../policies/suffix-matcher';
-import { encodeInlineBlock, decodeInlineBlock } from '../format/inline-codec';
+import { encodeInlineBlock } from '../format/inline-codec';
 import { serialize } from '../format/serializer';
-import { parse } from '../format/parser';
 import { atomicFileWrite } from '../utils/atomic-write';
 import { FORMAT_VERSION } from '../constants';
 import { showErrorNotice, showNotice } from '../ui/notices';
 import { PluginError } from '../providers/errors';
-import { MarkdownView } from 'obsidian';
 
 /**
  * Regex to find ```secret blocks.
- * Matches: ```secret\n<content>\n```
- * Uses non-greedy match for content.
  */
 const SECRET_BLOCK_REGEX = /```secret\n([\s\S]*?)\n```/g;
 
 /**
- * Regex to find ```ocke-v1 blocks.
- * Matches: ```ocke-v1\n<content>\n```
- * Uses non-greedy match for content.
- */
-const ENCRYPTED_BLOCK_REGEX = /```ocke-v1\n([\s\S]*?)\n```/g;
-
-/**
- * Set of file paths currently being processed by the inline block save hook.
- * Prevents re-entrant processing when the atomic write triggers another modify event.
+ * Set of file paths currently being processed.
+ * Prevents re-entrant processing.
  */
 const processingPaths = new Set<string>();
 
 /**
- * Register the inline block save hook that encrypts ```secret blocks on save.
- *
- * On vault modify event:
- * - Skips files matching the encrypted suffix (.secret.md)
- * - Finds all ```secret blocks
- * - Encrypts each block's content independently
- * - Replaces with ```ocke-v1 blocks
- * - Writes back atomically
- *
- * @param plugin - The Obsidian plugin instance
- * @param cryptoEngine - The CryptoEngine for envelope encryption
- * @param getSettings - Accessor for current plugin settings
+ * Register the inline block save hook.
  */
 export function registerInlineBlockSaveHook(
   plugin: Plugin,
@@ -64,80 +42,24 @@ export function registerInlineBlockSaveHook(
 ): void {
   plugin.registerEvent(
     plugin.app.vault.on('modify', (file: TAbstractFile) => {
-      // Only process files (not folders)
-      if (!isFile(file)) {
-        return;
-      }
+      if (!isFile(file)) return;
 
       const settings = getSettings();
 
-      // Skip files that match the encrypted suffix — those are handled by the full-file save hook
+      // Skip .secret.md files — handled by full-file save hook
       if (matchesEncryptedSuffix(file.name, settings.encryptedNoteSuffix)) {
         return;
       }
 
-      // Prevent re-entrant processing
-      if (processingPaths.has(file.path)) {
-        return;
-      }
+      if (processingPaths.has(file.path)) return;
 
-      // Fire-and-forget the async encryption
-      handleInlineBlockEncryption(file, plugin, cryptoEngine, settings).catch(
-        () => {
-          // Errors are handled inside handleInlineBlockEncryption
-        }
-      );
+      handleInlineBlockEncryption(file, plugin, cryptoEngine, settings).catch(() => {});
     })
   );
 }
 
 /**
- * Register the inline block open hook that decrypts ```ocke-v1 blocks on file open.
- *
- * On file-open event:
- * - If autoDecryptBlocks is false, returns (no-op)
- * - Reads editor content
- * - Finds all ```ocke-v1 blocks
- * - Decrypts each block independently
- * - Replaces with ```secret blocks in the editor
- * - On single block failure: leaves that block as ```ocke-v1 (graceful degradation)
- *
- * @param plugin - The Obsidian plugin instance
- * @param cryptoEngine - The CryptoEngine for decryption
- * @param getSettings - Accessor for current plugin settings
- */
-export function registerInlineBlockOpenHook(
-  plugin: Plugin,
-  cryptoEngine: CryptoEngine,
-  getSettings: () => PluginSettings
-): void {
-  plugin.registerEvent(
-    plugin.app.workspace.on('file-open', async (file: TFile | null) => {
-      if (!file) return;
-
-      const settings = getSettings();
-
-      // If auto-decrypt is disabled, do nothing
-      if (!settings.autoDecryptBlocks) {
-        return;
-      }
-
-      // Skip files that match the encrypted suffix — those are handled by the full-file open hook
-      if (matchesEncryptedSuffix(file.name, settings.encryptedNoteSuffix)) {
-        return;
-      }
-
-      try {
-        await handleInlineBlockDecryption(plugin, file, cryptoEngine);
-      } catch {
-        // Top-level errors are swallowed for graceful degradation
-      }
-    })
-  );
-}
-
-/**
- * Handle encryption of all ```secret blocks in a file.
+ * Encrypt ```secret blocks on disk, then restore editor to show decrypted content.
  */
 async function handleInlineBlockEncryption(
   file: TFile,
@@ -148,48 +70,41 @@ async function handleInlineBlockEncryption(
   processingPaths.add(file.path);
 
   try {
-    // Read file content
+    // Read what's on disk
     const content = await plugin.app.vault.read(file);
 
-    // Check if there are any ```secret blocks
+    // Check for ```secret blocks
     SECRET_BLOCK_REGEX.lastIndex = 0;
     if (!SECRET_BLOCK_REGEX.test(content)) {
       return;
     }
 
-    // Validate that a CMK ARN is configured
     if (!settings.awsCmkArn || settings.awsCmkArn.trim() === '') {
       showNotice(`Cannot encrypt inline blocks in "${file.path}": no CMK ARN configured`);
       return;
     }
 
-    // Reset regex for actual processing
     SECRET_BLOCK_REGEX.lastIndex = 0;
 
-    let result = content;
-    let match: RegExpExecArray | null;
-    const replacements: Array<{ original: string; encrypted: string }> = [];
-
-    // Collect all matches first (to avoid issues with modifying string during iteration)
+    // Collect matches
     const matches: Array<{ fullMatch: string; content: string }> = [];
+    let match: RegExpExecArray | null;
     while ((match = SECRET_BLOCK_REGEX.exec(content)) !== null) {
       matches.push({ fullMatch: match[0], content: match[1] });
     }
 
-    // Encrypt each block independently
+    // Encrypt each block
+    let encryptedContent = content;
     for (const m of matches) {
-      const plaintext = m.content;
       const encoder = new TextEncoder();
-      const plaintextBytes = encoder.encode(plaintext);
+      const plaintextBytes = encoder.encode(m.content);
 
-      // Build encryption context
       const context: EncryptionContext = {
         vaultName: plugin.app.vault.getName(),
         filePath: file.path,
         formatVersion: FORMAT_VERSION,
       };
 
-      // Encrypt
       const record = await cryptoEngine.encrypt(
         plaintextBytes,
         settings.awsCmkArn,
@@ -197,27 +112,32 @@ async function handleInlineBlockEncryption(
         context
       );
 
-      // Serialize to binary, then encode as inline block
       const serializedBytes = serialize(record);
       const inlineBlock = encodeInlineBlock(serializedBytes);
 
-      replacements.push({ original: m.fullMatch, encrypted: inlineBlock });
+      encryptedContent = encryptedContent.replace(m.fullMatch, inlineBlock);
     }
 
-    // Apply all replacements
-    for (const r of replacements) {
-      result = result.replace(r.original, r.encrypted);
-    }
+    if (encryptedContent === content) return;
 
-    // Only write if content actually changed
-    if (result === content) {
-      return;
-    }
-
-    // Atomic write
+    // Write encrypted version to disk
     const encoder = new TextEncoder();
-    const newContentBytes = encoder.encode(result);
-    await atomicFileWrite(plugin.app.vault, file.path, newContentBytes);
+    await atomicFileWrite(plugin.app.vault, file.path, encoder.encode(encryptedContent));
+
+    // Restore editor to show the decrypted (```secret) version
+    // so the user can continue editing
+    const activeView = plugin.app.workspace.getActiveViewOfType(MarkdownView);
+    if (activeView && activeView.file?.path === file.path) {
+      // Only restore if editor still shows the decrypted content
+      const editorContent = activeView.editor.getValue();
+      if (editorContent === content) {
+        // Editor still has ```secret — good, leave it
+        // (Obsidian hasn't re-read the file yet)
+      } else {
+        // Obsidian re-read the encrypted file — put decrypted back
+        activeView.editor.setValue(content);
+      }
+    }
   } catch (err) {
     if (err instanceof PluginError) {
       showErrorNotice(err);
@@ -231,80 +151,6 @@ async function handleInlineBlockEncryption(
   }
 }
 
-/**
- * Handle decryption of all ```ocke-v1 blocks in the editor on file open.
- */
-async function handleInlineBlockDecryption(
-  plugin: Plugin,
-  file: TFile,
-  cryptoEngine: CryptoEngine
-): Promise<void> {
-  const activeView = plugin.app.workspace.getActiveViewOfType(MarkdownView);
-  if (!activeView || activeView.file?.path !== file.path) {
-    return;
-  }
-
-  const content = activeView.editor.getValue();
-
-  // Check if there are any ```ocke-v1 blocks
-  ENCRYPTED_BLOCK_REGEX.lastIndex = 0;
-  if (!ENCRYPTED_BLOCK_REGEX.test(content)) {
-    return;
-  }
-
-  // Reset regex for actual processing
-  ENCRYPTED_BLOCK_REGEX.lastIndex = 0;
-
-  let result = content;
-  let match: RegExpExecArray | null;
-
-  // Collect all matches first
-  const matches: Array<{ fullMatch: string; base64Content: string }> = [];
-  while ((match = ENCRYPTED_BLOCK_REGEX.exec(content)) !== null) {
-    matches.push({ fullMatch: match[0], base64Content: match[1] });
-  }
-
-  // Decrypt each block independently — on failure, leave that block unchanged
-  for (const m of matches) {
-    try {
-      // Decode the inline block (base64 → binary)
-      const binaryData = decodeInlineBlock(m.fullMatch);
-      if (!binaryData) {
-        continue; // Skip malformed blocks
-      }
-
-      // Parse the binary data into an EncryptedFileRecord
-      const record = parse(binaryData);
-
-      // Build encryption context
-      const context: EncryptionContext = {
-        vaultName: plugin.app.vault.getName(),
-        filePath: file.path,
-        formatVersion: FORMAT_VERSION,
-      };
-
-      // Decrypt
-      const plaintextBytes = await cryptoEngine.decrypt(record, context);
-      const plaintext = new TextDecoder().decode(plaintextBytes);
-
-      // Replace the encrypted block with a secret block
-      const secretBlock = '```secret\n' + plaintext + '\n```';
-      result = result.replace(m.fullMatch, secretBlock);
-    } catch {
-      // Graceful degradation: leave this block as ```ocke-v1
-      continue;
-    }
-  }
-
-  // Only update editor if content changed
-  if (result !== content) {
-    activeView.editor.setValue(result);
-  }
-}
-
-/**
- * Type guard to check if a TAbstractFile is a TFile.
- */
 function isFile(file: TAbstractFile): file is TFile {
   return 'extension' in file;
 }

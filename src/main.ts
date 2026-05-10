@@ -1,19 +1,9 @@
 /**
  * Plugin main entry point — CloudKmsPlugin extends Obsidian Plugin.
  *
- * onload():
- *   1. Load settings via loadData()
- *   2. Create BufferRegistry
- *   3. Create ProviderDispatcherImpl, register AwsKmsAdapter
- *   4. Create CryptoEngineImpl(dispatcher)
- *   5. Register settings tab (CloudKmsSettingsTab)
- *   6. Register Phase 1 commands (encrypt/decrypt selection)
- *   7. Register Phase 2 hooks (save, open, attachment)
- *   8. Register Phase 2 commands (encrypt file)
- *   9. Register Phase 2 views (encrypted file view)
- *
- * onunload():
- *   1. bufferRegistry.releaseAll() — zero all in-memory buffers
+ * Uses monkey-patching of vault.adapter.read/write for transparent encryption:
+ * - adapter.read(): decrypts ```ocke-v1 → ```secret (editor sees plaintext)
+ * - adapter.write(): encrypts ```secret → ```ocke-v1 (disk has ciphertext)
  */
 
 import { Plugin } from 'obsidian';
@@ -25,18 +15,17 @@ import { CryptoEngineImpl } from './core/crypto-engine';
 import { CloudKmsSettingsTab, DEFAULT_SETTINGS, loadSettings } from './ui/settings-tab';
 import { registerEncryptSelectionCommand } from './commands/encrypt-selection';
 import { registerDecryptSelectionCommand } from './commands/decrypt-selection';
-import { registerSaveHook } from './hooks/save-hook';
-import { registerOpenHook } from './hooks/open-hook';
 import { registerAttachmentHook } from './hooks/attachment-hook';
-import { registerInlineBlockSaveHook, registerInlineBlockOpenHook } from './hooks/inline-block-hook';
 import { registerEncryptFileCommand } from './commands/encrypt-file';
 import { registerEncryptedFileView } from './ui/encrypted-view';
+import { installCryptoAdapterPatch } from './hooks/crypto-adapter-patch';
 
 export default class CloudKmsPlugin extends Plugin {
   settings: PluginSettings = DEFAULT_SETTINGS;
 
   private bufferRegistry!: BufferRegistry;
   private cryptoEngine!: CryptoEngineImpl;
+  private uninstallAdapterPatch?: () => void;
 
   async onload(): Promise<void> {
     // 1. Load settings
@@ -55,35 +44,32 @@ export default class CloudKmsPlugin extends Plugin {
     // 5. Register settings tab
     this.addSettingTab(new CloudKmsSettingsTab(this.app, this));
 
-    // 6. Register Phase 1 commands
-    registerEncryptSelectionCommand(
-      this,
-      this.cryptoEngine,
-      () => this.settings
-    );
-
-    registerDecryptSelectionCommand(
-      this,
-      this.cryptoEngine,
-      () => this.settings
-    );
-
-    // 7. Register Phase 2 hooks
-    registerSaveHook(this, this.cryptoEngine, () => this.settings);
-    registerOpenHook(this, this.cryptoEngine, () => this.settings);
-    registerAttachmentHook(this, this.cryptoEngine, () => this.settings, this.bufferRegistry);
-    registerInlineBlockSaveHook(this, this.cryptoEngine, () => this.settings);
-    registerInlineBlockOpenHook(this, this.cryptoEngine, () => this.settings);
-
-    // 8. Register Phase 2 commands
+    // 6. Register commands
+    registerEncryptSelectionCommand(this, this.cryptoEngine, () => this.settings);
+    registerDecryptSelectionCommand(this, this.cryptoEngine, () => this.settings);
     registerEncryptFileCommand(this, this.cryptoEngine, () => this.settings);
 
-    // 9. Register Phase 2 views
+    // 7. Install crypto adapter patch (transparent encrypt/decrypt)
+    this.uninstallAdapterPatch = installCryptoAdapterPatch(
+      this,
+      this.cryptoEngine,
+      () => this.settings
+    );
+
+    // 8. Register attachment hook
+    registerAttachmentHook(this, this.cryptoEngine, () => this.settings, this.bufferRegistry);
+
+    // 9. Register encrypted file view (fallback for errors)
     registerEncryptedFileView(this);
   }
 
   async onunload(): Promise<void> {
-    // Force-release all SecureBuffers to zero in-memory plaintext/DEK material
+    // Restore original adapter methods
+    if (this.uninstallAdapterPatch) {
+      this.uninstallAdapterPatch();
+    }
+
+    // Zero all in-memory buffers
     this.bufferRegistry.releaseAll();
   }
 

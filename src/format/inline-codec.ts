@@ -52,7 +52,7 @@ export function decodeInlineBlock(text: string): Uint8Array | null {
     return null;
   }
 
-  const base64Content = match[1].trim();
+  const base64Content = match[1].trim().replace(/\s/g, '');
   if (base64Content.length === 0) {
     return null;
   }
