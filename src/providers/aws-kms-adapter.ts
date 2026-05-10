@@ -13,6 +13,7 @@ import {
   DecryptCommand,
   DescribeKeyCommand,
 } from '@aws-sdk/client-kms';
+import { fromIni } from '@aws-sdk/credential-provider-ini';
 import { EncryptionContext, GenerateDataKeyResult, ProviderAdapter } from '../types';
 import { PluginError } from './errors';
 import { KMS_TIMEOUT_MS } from '../constants';
@@ -165,7 +166,14 @@ export class AwsKmsAdapter implements ProviderAdapter {
       // If an explicit client is provided (e.g. for testing), always use it
       this.clientFactory = () => client;
     } else {
-      this.clientFactory = (region?: string) => new KMSClient(region ? { region } : {});
+      // Explicitly use fromIni() to load credentials from ~/.aws/credentials.
+      // Electron (Obsidian) may not resolve the default credential chain correctly
+      // because GUI apps on Windows don't always inherit shell environment variables.
+      this.clientFactory = (region?: string) =>
+        new KMSClient({
+          ...(region ? { region } : {}),
+          credentials: fromIni(),
+        });
     }
     this.timeoutMs = timeoutMs ?? KMS_TIMEOUT_MS;
   }
