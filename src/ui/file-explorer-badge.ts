@@ -100,7 +100,7 @@ async function scanVaultForEncryptedFiles(
 /**
  * Apply CSS class to file explorer items for encrypted files.
  */
-function applyBadges(plugin: Plugin): void {
+function applyBadges(_plugin: Plugin): void {
   const fileExplorer = document.querySelectorAll('.nav-file');
 
   fileExplorer.forEach((el) => {

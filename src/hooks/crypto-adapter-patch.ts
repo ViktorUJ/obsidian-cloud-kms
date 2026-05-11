@@ -14,9 +14,9 @@
  * - Inner code fences render correctly (mermaid diagrams, code blocks, etc.)
  */
 
-import type { Plugin, DataAdapter } from 'obsidian';
+import type { Plugin } from 'obsidian';
 import type { CryptoEngine, EncryptionContext, PluginSettings } from '../types';
-import { decodeInlineBlock, encodeInlineBlock } from '../format/inline-codec';
+import { decodeInlineBlock } from '../format/inline-codec';
 import { parse } from '../format/parser';
 import { serialize } from '../format/serializer';
 import { FORMAT_VERSION } from '../constants';
@@ -31,8 +31,6 @@ import { showErrorNotice } from '../ui/notices';
  * Editor shows:   %%secret-start%% ... %%secret-end%%
  * Disk stores:    ````ocke-v1\n<base64>\n````
  */
-const SECRET_START = '%%secret-start%%';
-const SECRET_END = '%%secret-end%%';
 const SECRET_BLOCK_REGEX = /%%secret-start%%\n([\s\S]*?)\n%%secret-end%%/g;
 const ENCRYPTED_BLOCK_REGEX = /````ocke-v1\n([\s\S]*?)\n````/g;
 
@@ -54,7 +52,6 @@ export function installCryptoAdapterPatch(
   const originalRead = adapter.read.bind(adapter);
   const originalWrite = adapter.write.bind(adapter);
   const originalReadBinary = adapter.readBinary.bind(adapter);
-  const originalWriteBinary = adapter.writeBinary.bind(adapter);
 
   /**
    * Patched readBinary: decrypt binary files that start with OCKE magic bytes.

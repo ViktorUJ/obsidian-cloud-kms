@@ -5,7 +5,7 @@
  * and replaces them with ```secret blocks for editing.
  */
 
-import { Plugin, TFile, MarkdownView, WorkspaceLeaf } from 'obsidian';
+import { Plugin, MarkdownView } from 'obsidian';
 import type { CryptoEngine, EncryptionContext, PluginSettings } from '../types';
 import { FORMAT_VERSION } from '../constants';
 import { decodeInlineBlock } from '../format/inline-codec';

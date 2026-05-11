@@ -36,7 +36,7 @@ export function registerSecretBlockProcessor(
 ): void {
   plugin.registerMarkdownCodeBlockProcessor(
     'ocke-v1',
-    async (source: string, el: HTMLElement, ctx: MarkdownPostProcessorContext) => {
+    async (source: string, el: HTMLElement, _ctx: MarkdownPostProcessorContext) => {
       const base64Content = source.trim();
 
       // Create container

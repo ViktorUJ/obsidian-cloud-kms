@@ -7,7 +7,7 @@
  * After this, the file is no longer encrypted.
  */
 
-import { Notice, Plugin, TFile } from 'obsidian';
+import { Notice, Plugin } from 'obsidian';
 import type { CryptoEngine, EncryptionContext, PluginSettings } from '../types';
 import { FORMAT_VERSION, KMS_FILE_TIMEOUT_MS, NOTICE_DURATION_MS } from '../constants';
 import { isMagicMatch, parse } from '../format/parser';

@@ -8,7 +8,7 @@
  * this command is for manually removing the secret block markers.
  */
 
-import { Notice, Plugin, MarkdownView } from 'obsidian';
+import { Notice, Plugin } from 'obsidian';
 import type { CryptoEngine, PluginSettings } from '../types';
 import { NOTICE_DURATION_MS } from '../constants';
 
