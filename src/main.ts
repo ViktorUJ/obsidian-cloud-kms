@@ -17,8 +17,10 @@ import { registerEncryptSelectionCommand } from './commands/encrypt-selection';
 import { registerDecryptSelectionCommand } from './commands/decrypt-selection';
 import { registerAttachmentHook } from './hooks/attachment-hook';
 import { registerEncryptFileCommand } from './commands/encrypt-file';
+import { registerDecryptFileCommand } from './commands/decrypt-file';
 import { registerEncryptedFileView } from './ui/encrypted-view';
 import { installCryptoAdapterPatch } from './hooks/crypto-adapter-patch';
+import { installFileExplorerBadge } from './ui/file-explorer-badge';
 
 export default class CloudKmsPlugin extends Plugin {
   settings: PluginSettings = DEFAULT_SETTINGS;
@@ -26,6 +28,8 @@ export default class CloudKmsPlugin extends Plugin {
   private bufferRegistry!: BufferRegistry;
   private cryptoEngine!: CryptoEngineImpl;
   private uninstallAdapterPatch?: () => void;
+  private originalReadBinary?: (path: string) => Promise<ArrayBuffer>;
+  private uninstallBadge?: () => void;
 
   async onload(): Promise<void> {
     // 1. Load settings
@@ -48,16 +52,22 @@ export default class CloudKmsPlugin extends Plugin {
     registerEncryptSelectionCommand(this, this.cryptoEngine, () => this.settings);
     registerDecryptSelectionCommand(this, this.cryptoEngine, () => this.settings);
     registerEncryptFileCommand(this, this.cryptoEngine, () => this.settings);
+    registerDecryptFileCommand(this, this.cryptoEngine, () => this.settings, () => this.originalReadBinary);
 
     // 7. Install crypto adapter patch (transparent encrypt/decrypt)
-    this.uninstallAdapterPatch = installCryptoAdapterPatch(
+    const adapterPatch = installCryptoAdapterPatch(
       this,
       this.cryptoEngine,
       () => this.settings
     );
+    this.uninstallAdapterPatch = adapterPatch.uninstall;
+    this.originalReadBinary = adapterPatch.originalReadBinary;
 
     // 8. Register attachment hook
     registerAttachmentHook(this, this.cryptoEngine, () => this.settings, this.bufferRegistry);
+
+    // 9. File explorer badge for encrypted files
+    this.uninstallBadge = installFileExplorerBadge(this, this.originalReadBinary!);
 
     // 9. Register encrypted file view (fallback for errors)
     registerEncryptedFileView(this);
@@ -68,7 +78,10 @@ export default class CloudKmsPlugin extends Plugin {
     if (this.uninstallAdapterPatch) {
       this.uninstallAdapterPatch();
     }
-
+    // Remove file explorer badges
+    if (this.uninstallBadge) {
+      this.uninstallBadge();
+    }
     // Zero all in-memory buffers
     this.bufferRegistry.releaseAll();
   }

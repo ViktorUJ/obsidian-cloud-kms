@@ -2,7 +2,34 @@
 
 [![Known Vulnerabilities](https://snyk.io/test/github/ViktorUJ/obsidian-cloud-kms/badge.svg)](https://snyk.io/test/github/ViktorUJ/obsidian-cloud-kms)
 
-Плагин для [Obsidian](https://obsidian.md), обеспечивающий **прозрачное шифрование** секретных блоков в заметках с использованием облачных KMS-сервисов (AWS KMS).
+Плагин для [Obsidian](https://obsidian.md), обеспечивающий **прозрачное шифрование** секретных блоков и бинарных файлов с использованием AWS KMS.
+
+## Оглавление
+
+- [Зачем](#зачем)
+- [Ключевые принципы](#ключевые-принципы)
+- [Как работает](#как-работает)
+- [Команды](#команды)
+- [Использование](#использование)
+  - [Шифрование текста в заметках](#шифрование-текста-в-заметках)
+  - [Вложенные code fences (mermaid, code)](#вложенные-code-fences-mermaid-code-и-тд)
+  - [Шифрование бинарных файлов](#шифрование-бинарных-файлов)
+  - [Удаление шифрования текста](#удаление-шифрования-текста)
+- [Поведение](#поведение)
+- [Установка](#установка)
+  - [Требования](#требования)
+  - [Из GitHub Releases](#из-github-releases)
+  - [Из исходников](#из-исходников)
+  - [Настройка AWS](#настройка-aws)
+- [Настройки](#настройки)
+- [Безопасность](#безопасность)
+- [On-Disk Format](#on-disk-format)
+- [Управление доступом к ключу](#управление-доступом-к-ключу)
+  - [Пользователь из того же AWS-аккаунта](#пользователь-из-того-же-aws-аккаунта)
+  - [Пользователь из той же AWS Organization](#пользователь-из-той-же-aws-organization-другой-аккаунт)
+  - [Пользователь из сторонней организации](#пользователь-из-сторонней-организации-внешний-aws-аккаунт)
+- [Development](#development)
+- [Лицензия](LICENSE)
 
 ## Зачем
 
@@ -10,25 +37,41 @@
 
 ## Ключевые принципы
 
-- **Envelope Encryption** — каждый блок шифруется уникальным DEK (AES-256-GCM), а сам DEK оборачивается CMK в облачном KMS
+- **Envelope Encryption** — каждый блок/файл шифруется уникальным DEK (AES-256-GCM), а сам DEK оборачивается CMK в облачном KMS
 - **Identity-based Auth** — никаких паролей; используются системные credentials (AWS SSO, IAM Role, `~/.aws/credentials`)
 - **Local-First Crypto** — симметричное шифрование выполняется локально через WebCrypto API; в KMS уходит только DEK для wrap/unwrap
 - **Zero Cleartext on Disk** — расшифрованный контент существует только в оперативной памяти процесса Obsidian
 - **Transparent** — шифрование/расшифровка происходит автоматически при чтении/записи файлов (monkey-patch vault adapter)
-- **Nested Fences** — маркеры `%%secret-start%%` / `%%secret-end%%` не конфликтуют с code fences, позволяя вкладывать ```mermaid, ```js и любой другой markdown
+- **Nested Content** — маркеры `%%secret-start%%` / `%%secret-end%%` не конфликтуют с code fences, позволяя вкладывать ```mermaid, ```js и любой другой markdown
 
 ## Как работает
 
+### Markdown-файлы (секретные блоки)
+
 Плагин перехватывает чтение и запись файлов на уровне Obsidian vault adapter:
 
-- **При записи на диск**: все блоки между `%%secret-start%%` и `%%secret-end%%` автоматически шифруются → на диске хранятся как `````ocke-v1`
-- **При чтении с диска**: все `````ocke-v1` блоки автоматически расшифровываются → в редакторе показываются между `%%secret-start%%` / `%%secret-end%%`
+- **При записи на диск**: все блоки между `%%secret-start%%` и `%%secret-end%%` автоматически шифруются → на диске хранятся как ````ocke-v1
+- **При чтении с диска**: все ````ocke-v1 блоки автоматически расшифровываются → в редакторе показываются между `%%secret-start%%` / `%%secret-end%%`
 
-Вы работаете с расшифрованным текстом в редакторе, а на диске всегда лежит шифротекст.
+### Бинарные файлы (PDF, изображения, аудио)
+
+- Команда **"Encrypt current file"** шифрует файл на месте (имя не меняется)
+- При открытии — файл расшифровывается в памяти (Blob URL), Obsidian показывает его как обычно
+- На диске всегда зашифрованные байты в формате OCKE
+- В file explorer зашифрованные файлы отмечены 🔒
+
+## Команды
+
+| Команда | Описание |
+|---------|----------|
+| **Wrap selection in secret block** | Оборачивает выделенный текст в `%%secret-start%%` / `%%secret-end%%` |
+| **Unwrap secret block** | Убирает маркеры шифрования, оставляя plaintext |
+| **Encrypt current file with AWS KMS** | Шифрует бинарный файл (PDF, PNG, MP3) на месте |
+| **Decrypt current file with AWS KMS (permanent)** | Расшифровывает бинарный файл навсегда (записывает plaintext на диск) |
 
 ## Использование
 
-### Шифрование текста
+### Шифрование текста в заметках
 
 1. Выделите текст в заметке
 2. `Ctrl+P` → **"Wrap selection in secret block"**
@@ -78,7 +121,17 @@ aws s3 cp secret.tar.gz s3://my-bucket/
 
 После сохранения весь блок (включая mermaid-диаграмму и код) будет зашифрован на диске. При открытии — расшифрован, и mermaid отрендерится как диаграмма в Reading view.
 
-### Удаление шифрования
+### Шифрование бинарных файлов
+
+1. Откройте PDF, изображение или другой бинарный файл
+2. `Ctrl+P` → **"Encrypt current file with AWS KMS"**
+3. Файл зашифрован на месте (имя не меняется, в file explorer появляется 🔒)
+4. При следующем открытии — расшифровывается в памяти, отображается как обычно
+
+Для **постоянной** расшифровки (записать plaintext обратно на диск):
+- `Ctrl+P` → **"Decrypt current file with AWS KMS (permanent)"**
+
+### Удаление шифрования текста
 
 1. Выделите весь блок (от `%%secret-start%%` до `%%secret-end%%`)
 2. `Ctrl+P` → **"Unwrap secret block"**
@@ -88,11 +141,14 @@ aws s3 cp secret.tar.gz s3://my-bucket/
 
 | Ситуация | Результат |
 |----------|-----------|
-| Сохранение файла с `%%secret-start%%` блоками | Блоки шифруются → на диске `````ocke-v1` |
-| Открытие файла с `````ocke-v1` блоками (ключ доступен) | Блоки расшифровываются → в редакторе `%%secret-start%%...%%secret-end%%` |
-| Открытие файла с `````ocke-v1` блоками (ключ НЕ доступен) | Блоки остаются как `````ocke-v1` (зашифрованный base64) |
+| Сохранение .md с `%%secret-start%%` блоками | Блоки шифруются → на диске ````ocke-v1 |
+| Открытие .md с ````ocke-v1 блоками (ключ доступен) | Расшифровываются → в редакторе `%%secret-start%%...%%secret-end%%` |
+| Открытие .md с ````ocke-v1 блоками (ключ НЕ доступен) | Остаются как ````ocke-v1 (зашифрованный base64) |
+| Открытие зашифрованного PDF/PNG (ключ доступен) | Расшифровывается в памяти → отображается нормально |
+| Открытие зашифрованного PDF/PNG (ключ НЕ доступен) | Obsidian не может отрендерить файл |
 | KMS недоступен при сохранении | Файл сохраняется как есть, ошибка показывается |
-| Каждый блок | Шифруется независимо (свой DEK) |
+| Каждый блок/файл | Шифруется независимо (свой DEK) |
+| File explorer | Зашифрованные бинарные файлы отмечены 🔒 |
 
 ## Установка
 
@@ -143,29 +199,34 @@ npm run build
 | Параметр | Описание | По умолчанию |
 |----------|----------|--------------|
 | AWS KMS Key ARN | ARN ключа для шифрования | — |
-| Encrypted note suffix | Суффикс для полного шифрования файла | `.secret.md` |
 | Auto-decrypt blocks | Автоматическая расшифровка при чтении | ✅ |
 
 ## Безопасность
 
 - Расшифрованные данные **никогда не записываются на диск** — adapter patch шифрует перед записью
+- Бинарные файлы расшифровываются в Blob URL (RAM), не на диск
 - DEK обнуляется сразу после использования
-- Каждый блок использует уникальный DEK + nonce
+- Каждый блок/файл использует уникальный DEK + nonce
 - AES-256-GCM с 96-bit nonce и 128-bit auth tag
 - Encryption context привязан к vault name + file path + format version
 - Все KMS-вызовы логируются в AWS CloudTrail
+- LRU-кеш на 20 расшифрованных бинарных файлов (старые вытесняются из памяти)
 
 ## On-Disk Format
 
+### Markdown (секретные блоки)
+
 На диске секретные блоки хранятся как:
 
-````
+`````
 ````ocke-v1
 <base64-encoded encrypted data>
 ````
-````
+`````
 
-Бинарный формат внутри base64 (OCKE v1):
+### Бинарные файлы
+
+Файл целиком заменяется на OCKE бинарный формат:
 
 ```
 [Magic: "OCKE" 4B][Version: uint16 BE][ProviderIdLen: 1B][ProviderId]
@@ -173,7 +234,7 @@ npm run build
 [Nonce: 12B][AuthTag: 16B][CiphertextLen: uint32 BE][Ciphertext]
 ```
 
-## Разработка
+## Development
 
 ```bash
 npm test          # Запуск тестов
@@ -182,6 +243,133 @@ npm run dev       # Dev build (watch)
 make ci           # Full CI pipeline
 ```
 
+## Управление доступом к ключу
+
+### Пользователь из того же AWS-аккаунта
+
+Добавьте IAM-политику пользователю/роли:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "kms:Decrypt",
+        "kms:GenerateDataKey",
+        "kms:DescribeKey"
+      ],
+      "Resource": "arn:aws:kms:eu-north-1:790660747904:key/YOUR-KEY-ID"
+    }
+  ]
+}
+```
+
+```bash
+aws iam put-user-policy \
+  --user-name colleague \
+  --policy-name kms-vault-access \
+  --policy-document file://policy.json
+```
+
+Для read-only доступа (только расшифровка) — уберите `kms:GenerateDataKey`.
+
+### Пользователь из той же AWS Organization (другой аккаунт)
+
+**Шаг 1.** Обновите Key Policy на стороне владельца ключа — разрешите доступ из другого аккаунта:
+
+```json
+{
+  "Sid": "AllowCrossAccountDecrypt",
+  "Effect": "Allow",
+  "Principal": {
+    "AWS": "arn:aws:iam::111122223333:root"
+  },
+  "Action": [
+    "kms:Decrypt",
+    "kms:GenerateDataKey",
+    "kms:DescribeKey"
+  ],
+  "Resource": "*"
+}
+```
+
+```bash
+# Получить текущую политику ключа
+aws kms get-key-policy --key-id YOUR-KEY-ID --policy-name default --output text > key-policy.json
+
+# Добавить Statement выше в key-policy.json, затем:
+aws kms put-key-policy --key-id YOUR-KEY-ID --policy-name default --policy file://key-policy.json
+```
+
+**Шаг 2.** На стороне другого аккаунта (111122223333) — добавьте IAM-политику пользователю:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "kms:Decrypt",
+        "kms:GenerateDataKey",
+        "kms:DescribeKey"
+      ],
+      "Resource": "arn:aws:kms:eu-north-1:790660747904:key/YOUR-KEY-ID"
+    }
+  ]
+}
+```
+
+> Оба условия обязательны: Key Policy разрешает аккаунт, IAM Policy разрешает пользователя.
+
+### Пользователь из сторонней организации (внешний AWS-аккаунт)
+
+Аналогично cross-account, но с дополнительными ограничениями через `Condition`:
+
+**Шаг 1.** Key Policy — разрешите конкретного пользователя/роль (не весь аккаунт):
+
+```json
+{
+  "Sid": "AllowExternalPartnerDecrypt",
+  "Effect": "Allow",
+  "Principal": {
+    "AWS": "arn:aws:iam::444455556666:user/partner-user"
+  },
+  "Action": [
+    "kms:Decrypt",
+    "kms:DescribeKey"
+  ],
+  "Resource": "*",
+  "Condition": {
+    "StringEquals": {
+      "kms:EncryptionContext:vaultName": "shared-vault"
+    }
+  }
+}
+```
+
+> **Рекомендации для внешних партнёров:**
+> - Указывайте конкретный Principal (user/role ARN), не `root` аккаунта
+> - Давайте только `kms:Decrypt` (без `GenerateDataKey`) — только чтение
+> - Используйте `Condition` с `kms:EncryptionContext` для ограничения доступа к конкретному vault
+> - Включите CloudTrail для аудита всех обращений к ключу
+
+**Шаг 2.** Партнёр добавляет IAM-политику на своей стороне (как в cross-account выше).
+
+**Шаг 3.** Партнёр настраивает плагин с тем же ARN ключа и получает доступ к расшифровке.
+
+### Проверка доступа
+
+```bash
+# От имени пользователя, которому дали доступ:
+aws kms describe-key --key-id arn:aws:kms:eu-north-1:790660747904:key/YOUR-KEY-ID
+
+# Если вернёт метаданные ключа — доступ есть
+# Если AccessDeniedException — проверьте Key Policy + IAM Policy
+```
+
 ## Лицензия
 
-MIT
+[MIT](LICENSE) © Viktar Mikalayeu

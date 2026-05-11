@@ -47,12 +47,110 @@ export function installCryptoAdapterPatch(
   plugin: Plugin,
   cryptoEngine: CryptoEngine,
   getSettings: () => PluginSettings
-): () => void {
+): { uninstall: () => void; originalReadBinary: (path: string) => Promise<ArrayBuffer> } {
   const adapter = plugin.app.vault.adapter;
 
   // Save original methods
   const originalRead = adapter.read.bind(adapter);
   const originalWrite = adapter.write.bind(adapter);
+  const originalReadBinary = adapter.readBinary.bind(adapter);
+  const originalWriteBinary = adapter.writeBinary.bind(adapter);
+
+  /**
+   * Patched readBinary: decrypt binary files that start with OCKE magic bytes.
+   */
+  adapter.readBinary = async function (normalizedPath: string): Promise<ArrayBuffer> {
+    const data = await originalReadBinary(normalizedPath);
+    const bytes = new Uint8Array(data);
+
+    // Check for OCKE magic bytes (0x4F 0x43 0x4B 0x45)
+    if (bytes.length < 4 || bytes[0] !== 0x4F || bytes[1] !== 0x43 || bytes[2] !== 0x4B || bytes[3] !== 0x45) {
+      return data;
+    }
+
+    // Skip .md files — they use text-based encryption
+    if (normalizedPath.endsWith('.md')) {
+      return data;
+    }
+
+    const settings = getSettings();
+    if (!settings.autoDecryptBlocks) {
+      return data;
+    }
+
+    // Decrypt the binary file
+    try {
+      const record = parse(bytes);
+      const context: EncryptionContext = {
+        vaultName: plugin.app.vault.getName(),
+        filePath: normalizedPath,
+        formatVersion: FORMAT_VERSION,
+      };
+
+      const plaintextBytes = await cryptoEngine.decrypt(record, context);
+      return plaintextBytes.buffer;
+    } catch {
+      // On failure, return original (Obsidian won't be able to render it)
+      return data;
+    }
+  };
+
+  /**
+   * Blob URL cache for encrypted binary files (lazy, LRU-like).
+   * Decryption happens on first access, not at startup.
+   */
+  const blobUrls = new Map<string, string>();
+
+  /**
+   * Patch vault.getResourcePath to return Blob URLs for encrypted binary files.
+   */
+  const originalGetResourcePath = plugin.app.vault.getResourcePath.bind(plugin.app.vault);
+  plugin.app.vault.getResourcePath = function (file: any): string {
+    if (!file || !file.path || file.path.endsWith('.md')) {
+      return originalGetResourcePath(file);
+    }
+
+    const cached = blobUrls.get(file.path);
+    if (cached && cached !== '__pending__') {
+      return cached;
+    }
+
+    if (!cached) {
+      triggerBinaryDecrypt(file.path, plugin, cryptoEngine, getSettings, blobUrls, originalReadBinary, originalGetResourcePath);
+    }
+
+    return originalGetResourcePath(file);
+  };
+
+  /**
+   * On file-open: if it's an encrypted binary, wait for decryption
+   * then force Obsidian to re-open the file so it picks up the Blob URL.
+   */
+  plugin.registerEvent(
+    plugin.app.workspace.on('file-open', async (file: any) => {
+      if (!file || !file.path || file.path.endsWith('.md')) return;
+
+      // Check if already decrypted
+      const cached = blobUrls.get(file.path);
+      if (cached && cached !== '__pending__') return;
+
+      // Wait for decryption to complete (poll)
+      for (let i = 0; i < 50; i++) {
+        await new Promise(r => setTimeout(r, 100));
+        const url = blobUrls.get(file.path);
+        if (url && url !== '__pending__') {
+          // Force re-render by triggering a leaf update
+          const leaf = plugin.app.workspace.activeLeaf;
+          if (leaf) {
+            const state = leaf.getViewState();
+            await leaf.setViewState({ type: 'empty', state: {} });
+            await leaf.setViewState(state);
+          }
+          return;
+        }
+      }
+    })
+  );
 
   /**
    * Patched read: after reading from disk, decrypt ````ocke-v1 → ````secret
@@ -139,10 +237,19 @@ export function installCryptoAdapterPatch(
     }
   };
 
-  // Return cleanup function
-  return () => {
-    adapter.read = originalRead;
-    adapter.write = originalWrite as any;
+  // Return cleanup function and original readBinary for decrypt command
+  return {
+    uninstall: () => {
+      adapter.read = originalRead;
+      adapter.write = originalWrite as any;
+      adapter.readBinary = originalReadBinary;
+      plugin.app.vault.getResourcePath = originalGetResourcePath;
+      for (const url of blobUrls.values()) {
+        try { URL.revokeObjectURL(url); } catch { /* ignore */ }
+      }
+      blobUrls.clear();
+    },
+    originalReadBinary,
   };
 }
 
@@ -239,4 +346,99 @@ async function encryptBlocks(
   }
 
   return result;
+}
+
+/**
+ * Trigger async decryption of a binary file and create a Blob URL.
+ * Once decrypted, the Blob URL is stored in the cache.
+ * Obsidian will re-request getResourcePath on next render cycle.
+ */
+async function triggerBinaryDecrypt(
+  filePath: string,
+  plugin: Plugin,
+  cryptoEngine: CryptoEngine,
+  getSettings: () => PluginSettings,
+  blobUrls: Map<string, string>,
+  originalReadBinary: (path: string) => Promise<ArrayBuffer>,
+  _originalGetResourcePath: (file: any) => string
+): Promise<void> {
+  // Prevent duplicate decryption attempts
+  if (blobUrls.has(filePath)) return;
+  // Use a sentinel to prevent re-triggering
+  blobUrls.set(filePath, '__pending__');
+
+  try {
+    const settings = getSettings();
+    if (!settings.autoDecryptBlocks) {
+      blobUrls.delete(filePath);
+      return;
+    }
+
+    const data = await originalReadBinary(filePath);
+    const bytes = new Uint8Array(data);
+
+    // Verify OCKE magic
+    if (bytes.length < 4 || bytes[0] !== 0x4F || bytes[1] !== 0x43 || bytes[2] !== 0x4B || bytes[3] !== 0x45) {
+      blobUrls.delete(filePath);
+      return;
+    }
+
+    const record = parse(bytes);
+    const context: EncryptionContext = {
+      vaultName: plugin.app.vault.getName(),
+      filePath,
+      formatVersion: FORMAT_VERSION,
+    };
+
+    const plaintextBytes = await cryptoEngine.decrypt(record, context);
+
+    // Determine MIME type from extension
+    const mimeType = getMimeTypeFromPath(filePath);
+    const blob = new Blob([plaintextBytes], { type: mimeType });
+    const blobUrl = URL.createObjectURL(blob);
+
+    blobUrls.set(filePath, blobUrl);
+
+    // Evict old entries if cache exceeds 20
+    if (blobUrls.size > 20) {
+      let toRemove = blobUrls.size - 20;
+      for (const [p, u] of blobUrls) {
+        if (toRemove <= 0) break;
+        if (u === '__pending__' || p === filePath) continue;
+        try { URL.revokeObjectURL(u); } catch { /* ignore */ }
+        blobUrls.delete(p);
+        toRemove--;
+      }
+    }
+
+    // Force Obsidian to re-render the file by triggering a metadata change
+    const file = plugin.app.vault.getAbstractFileByPath(filePath);
+    if (file) {
+      plugin.app.metadataCache.trigger('changed', file);
+    }
+  } catch {
+    blobUrls.delete(filePath);
+  }
+}
+
+/**
+ * Get MIME type from file path extension.
+ */
+function getMimeTypeFromPath(filePath: string): string {
+  const ext = filePath.split('.').pop()?.toLowerCase() ?? '';
+  const mimeMap: Record<string, string> = {
+    pdf: 'application/pdf',
+    png: 'image/png',
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    gif: 'image/gif',
+    svg: 'image/svg+xml',
+    webp: 'image/webp',
+    mp3: 'audio/mpeg',
+    mp4: 'video/mp4',
+    wav: 'audio/wav',
+    ogg: 'audio/ogg',
+    webm: 'video/webm',
+  };
+  return mimeMap[ext] ?? 'application/octet-stream';
 }

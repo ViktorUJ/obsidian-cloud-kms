@@ -1,43 +1,31 @@
 /**
- * Phase 2 command: "Encrypt current file with AWS KMS"
+ * Command: "Encrypt current file with AWS KMS"
  *
- * Registers an Obsidian command that encrypts the currently active file
- * (note or attachment) using envelope encryption (AES-256-GCM + AWS KMS DEK wrap).
+ * Encrypts the currently active binary file (pdf, png, mp3, etc.) in place.
+ * The file name does NOT change. The content is replaced with OCKE binary format.
+ *
+ * For .md files — use %%secret-start%% / %%secret-end%% blocks instead.
+ *
+ * The readBinary() adapter patch will transparently decrypt on read,
+ * so Obsidian can preview the file as usual.
  *
  * Flow:
- *   1. Get active file → if none, notice "No active file"
- *   2. Check if already encrypted (suffix match for notes, `.enc` for attachments) → notice
- *   3. Read file content from vault
- *   4. For notes (.md): split frontmatter/body, encrypt body, rename to add suffix, atomic write
- *   5. For attachments: encrypt entire content, rename to add `.enc` before extension, atomic write
- *   6. On any failure: restore original file name and content, show notice
- *   7. Use KMS_FILE_TIMEOUT_MS (30s) for the KMS call
- *
- * Requirements: 7.1, 7.2, 7.3, 7.4, 7.5
+ *   1. Get active file → if none or .md, show notice
+ *   2. Check if already encrypted (OCKE magic bytes) → skip
+ *   3. Read binary content
+ *   4. Encrypt via CryptoEngine
+ *   5. Serialize to OCKE binary format
+ *   6. Write back to same path
  */
 
 import { Notice, Plugin, TFile } from 'obsidian';
 import type { CryptoEngine, EncryptionContext, PluginSettings } from '../types';
-import {
-  FORMAT_VERSION,
-  KMS_FILE_TIMEOUT_MS,
-  NOTICE_DURATION_MS,
-} from '../constants';
+import { FORMAT_VERSION, KMS_FILE_TIMEOUT_MS, NOTICE_DURATION_MS } from '../constants';
 import { validateAwsKmsArn } from '../utils/arn-validator';
 import { serialize } from '../format/serializer';
-import { splitFrontmatter } from '../utils/frontmatter';
-import { matchesEncryptedSuffix, matchesEncryptedAttachment } from '../policies/suffix-matcher';
-import { encodeInlineBlock } from '../format/inline-codec';
+import { isMagicMatch } from '../format/parser';
+import { markFileEncrypted } from '../ui/file-explorer-badge';
 
-/**
- * Register the "Encrypt current file with AWS KMS" command on the given plugin.
- *
- * Available from the command palette and file context menu for any file in the vault.
- *
- * @param plugin - The Obsidian plugin instance to register the command on
- * @param cryptoEngine - The CryptoEngine used for envelope encryption
- * @param getSettings - A function that returns the current plugin settings
- */
 export function registerEncryptFileCommand(
   plugin: Plugin,
   cryptoEngine: CryptoEngine,
@@ -47,195 +35,76 @@ export function registerEncryptFileCommand(
     id: 'encrypt-current-file-aws-kms',
     name: 'Encrypt current file with AWS KMS',
     callback: () => {
-      executeEncryptFile(plugin, cryptoEngine, getSettings).catch(() => {
-        // Errors are handled inside executeEncryptFile via notices
-      });
+      executeEncryptFile(plugin, cryptoEngine, getSettings).catch(() => {});
     },
   });
 }
 
-/**
- * Determine if a file is a Markdown note.
- */
-function isNote(file: TFile): boolean {
-  return file.extension === 'md';
-}
-
-/**
- * Compute the encrypted file path for a note.
- * Inserts the configured suffix before the `.md` extension.
- * E.g., "notes/report.md" with suffix ".secret.md" → "notes/report.secret.md"
- */
-function computeEncryptedNotePath(filePath: string, suffix: string): string {
-  // The suffix already includes `.md`, so strip `.md` from original and append suffix
-  if (filePath.endsWith('.md')) {
-    return filePath.slice(0, -3) + suffix;
-  }
-  return filePath + suffix;
-}
-
-/**
- * Compute the encrypted file path for an attachment.
- * Inserts `.enc` before the extension.
- * E.g., "assets/screenshot.png" → "assets/screenshot.enc.png"
- */
-function computeEncryptedAttachmentPath(filePath: string): string {
-  const lastDot = filePath.lastIndexOf('.');
-  if (lastDot === -1) {
-    // No extension — just append .enc
-    return filePath + '.enc';
-  }
-  return filePath.slice(0, lastDot) + '.enc' + filePath.slice(lastDot);
-}
-
-/**
- * Execute the encrypt file flow.
- * All errors are caught and trigger rollback + notice display.
- */
 async function executeEncryptFile(
   plugin: Plugin,
   cryptoEngine: CryptoEngine,
   getSettings: () => PluginSettings
 ): Promise<void> {
-  // Step 1: Get active file
   const file = plugin.app.workspace.getActiveFile();
   if (!file) {
     new Notice('No active file', NOTICE_DURATION_MS);
     return;
   }
 
-  const settings = getSettings();
-
-  // Step 2: Check if already encrypted
-  if (isNote(file)) {
-    if (matchesEncryptedSuffix(file.name, settings.encryptedNoteSuffix)) {
-      new Notice('File is already encrypted', NOTICE_DURATION_MS);
-      return;
-    }
-  } else {
-    if (matchesEncryptedAttachment(file.name)) {
-      new Notice('File is already encrypted', NOTICE_DURATION_MS);
-      return;
-    }
-  }
-
-  // Validate CMK ARN
-  const arnValidation = validateAwsKmsArn(settings.awsCmkArn);
-  if (!arnValidation.valid) {
+  // For .md files, suggest using secret blocks instead
+  if (file.extension === 'md') {
     new Notice(
-      'Configure a valid AWS KMS Key ARN in plugin settings.',
+      'For markdown files, use %%secret-start%% / %%secret-end%% blocks.\nThis command is for binary files (PDF, images, etc.).',
       NOTICE_DURATION_MS
     );
     return;
   }
 
-  const vault = plugin.app.vault;
-  const originalPath = file.path;
-
-  // Track state for rollback
-  let renamed = false;
-  let newPath = '';
-  let originalContent: Uint8Array | null = null;
+  const settings = getSettings();
+  const arnValidation = validateAwsKmsArn(settings.awsCmkArn);
+  if (!arnValidation.valid) {
+    new Notice('Configure a valid AWS KMS Key ARN in plugin settings.', NOTICE_DURATION_MS);
+    return;
+  }
 
   try {
-    if (isNote(file)) {
-      // Step 4: Notes (.md) — split frontmatter/body, encrypt body, rename, atomic write
-      const content = await vault.read(file);
-      const encoder = new TextEncoder();
-      originalContent = encoder.encode(content);
+    // Read binary content
+    const contentBuffer = await plugin.app.vault.readBinary(file);
+    const contentBytes = new Uint8Array(contentBuffer);
 
-      const { frontmatter, body } = splitFrontmatter(content);
-
-      // Encrypt the body
-      const bodyBytes = encoder.encode(body);
-
-      newPath = computeEncryptedNotePath(originalPath, settings.encryptedNoteSuffix);
-
-      // Build encryption context using the NEW path (post-rename)
-      const context: EncryptionContext = {
-        vaultName: vault.getName(),
-        filePath: newPath,
-        formatVersion: FORMAT_VERSION,
-      };
-
-      // Encrypt with 30s timeout
-      const record = await withTimeout(
-        cryptoEngine.encrypt(bodyBytes, settings.awsCmkArn, 'aws-kms', context),
-        KMS_FILE_TIMEOUT_MS
-      );
-
-      // Serialize the encrypted record
-      const encryptedBinary = serialize(record);
-
-      // Build the final file content: frontmatter (if any) + encrypted inline block
-      const inlineBlock = encodeInlineBlock(encryptedBinary);
-      const finalContent = (frontmatter ?? '') + inlineBlock;
-      const finalBytes = encoder.encode(finalContent);
-
-      // Rename the file first
-      await vault.rename(file, newPath);
-      renamed = true;
-
-      // Write the encrypted content
-      await vault.adapter.writeBinary(newPath, finalBytes);
-    } else {
-      // Step 5: Attachments — encrypt entire content, rename with `.enc`, atomic write
-      const contentBuffer = await vault.readBinary(file);
-      const contentBytes = new Uint8Array(contentBuffer);
-      originalContent = new Uint8Array(contentBytes);
-
-      newPath = computeEncryptedAttachmentPath(originalPath);
-
-      // Build encryption context using the NEW path (post-rename)
-      const context: EncryptionContext = {
-        vaultName: vault.getName(),
-        filePath: newPath,
-        formatVersion: FORMAT_VERSION,
-      };
-
-      // Encrypt with 30s timeout
-      const record = await withTimeout(
-        cryptoEngine.encrypt(contentBytes, settings.awsCmkArn, 'aws-kms', context),
-        KMS_FILE_TIMEOUT_MS
-      );
-
-      // Serialize the encrypted record to binary on-disk format
-      const encryptedBinary = serialize(record);
-
-      // Rename the file first
-      await vault.rename(file, newPath);
-      renamed = true;
-
-      // Write the encrypted content
-      await vault.adapter.writeBinary(newPath, encryptedBinary);
+    // Check if already encrypted (OCKE magic bytes)
+    if (isMagicMatch(contentBytes)) {
+      new Notice('File is already encrypted', NOTICE_DURATION_MS);
+      return;
     }
+
+    // Build encryption context
+    const context: EncryptionContext = {
+      vaultName: plugin.app.vault.getName(),
+      filePath: file.path,
+      formatVersion: FORMAT_VERSION,
+    };
+
+    // Encrypt
+    const record = await withTimeout(
+      cryptoEngine.encrypt(contentBytes, settings.awsCmkArn, 'aws-kms', context),
+      KMS_FILE_TIMEOUT_MS
+    );
+
+    // Serialize to OCKE binary format
+    const encryptedBinary = serialize(record);
+
+    // Write back to same path (no rename)
+    await plugin.app.vault.adapter.writeBinary(file.path, encryptedBinary);
+
+    markFileEncrypted(file.path);
+    new Notice(`Encrypted: ${file.name}`, NOTICE_DURATION_MS);
   } catch (err) {
-    // Step 6: Rollback on failure
-    if (renamed) {
-      try {
-        // Rename back to original path
-        const renamedFile = vault.getAbstractFileByPath(newPath);
-        if (renamedFile && renamedFile instanceof TFile) {
-          await vault.rename(renamedFile, originalPath);
-        }
-        // Restore original content if we have it
-        if (originalContent) {
-          await vault.adapter.writeBinary(originalPath, originalContent);
-        }
-      } catch {
-        // Best-effort rollback
-      }
-    }
-
     const message = err instanceof Error ? err.message : 'File encryption failed';
     new Notice(`Encryption error: ${message}`, NOTICE_DURATION_MS);
   }
 }
 
-/**
- * Wrap a promise with a timeout. Rejects with a timeout error if the
- * promise does not resolve within the specified duration.
- */
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => {
@@ -243,14 +112,8 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
     }, timeoutMs);
 
     promise.then(
-      (value) => {
-        clearTimeout(timer);
-        resolve(value);
-      },
-      (err) => {
-        clearTimeout(timer);
-        reject(err);
-      }
+      (value) => { clearTimeout(timer); resolve(value); },
+      (err) => { clearTimeout(timer); reject(err); }
     );
   });
 }
