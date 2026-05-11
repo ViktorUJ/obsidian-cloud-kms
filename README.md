@@ -31,6 +31,8 @@ An [Obsidian](https://obsidian.md) plugin providing **transparent encryption** o
   - [User from the same AWS account](#user-from-the-same-aws-account)
   - [User from the same AWS Organization](#user-from-the-same-aws-organization-different-account)
   - [User from an external organization](#user-from-an-external-organization-external-aws-account)
+- [Comparison with Alternatives](#comparison-with-alternatives)
+- [Git Workflow](#git-workflow)
 - [Development](#development)
 - [License](LICENSE)
 
@@ -419,6 +421,130 @@ aws kms describe-key --key-id arn:aws:kms:eu-north-1:790660747904:key/YOUR-KEY-I
 
 # If it returns key metadata — access is granted
 # If AccessDeniedException — check Key Policy + IAM Policy
+```
+
+## Comparison with Alternatives
+
+| Feature | Cloud KMS Encryption | SOPS | git-crypt | Meld Encrypt | HashiCorp Vault |
+|---------|---------------------|------|-----------|--------------|-----------------|
+| Encryption at rest | ✅ | ✅ | ✅ | ✅ | ✅ |
+| No passwords | ✅ (IAM) | ✅ (IAM/PGP) | ✅ (GPG) | ❌ (password) | ✅ (tokens) |
+| Per-block granularity | ✅ | ✅ | ❌ (whole file) | ✅ | N/A |
+| Multi-key / multi-team | ✅ | ✅ | ✅ | ❌ | ✅ |
+| Git-safe (ciphertext in repo) | ✅ | ✅ | ✅ | ✅ | N/A |
+| Transparent edit (no manual decrypt) | ✅ | ❌ (CLI) | ✅ | ❌ (modal) | N/A |
+| Binary file encryption | ✅ | ❌ | ✅ | ❌ | N/A |
+| Obsidian integration | ✅ native | ❌ | ❌ | ✅ native | ❌ |
+| Audit trail (CloudTrail) | ✅ | ✅ | ❌ | ❌ | ✅ |
+| External audit / certification | ❌ | ❌ | ❌ | ❌ | ✅ |
+| HSM-grade security | ❌ | ❌ | ❌ | ❌ | ✅ |
+
+**Best fit:**
+- **Cloud KMS Encryption** — team knowledge bases with IAM access control, DevOps secrets in Obsidian
+- **SOPS** — CI/CD secrets in YAML/JSON files, GitOps workflows
+- **git-crypt** — whole-file encryption in Git repos, developer workflows
+- **Meld Encrypt** — personal password-protected notes, single-user
+- **HashiCorp Vault** — production infrastructure secrets, compliance requirements
+
+## Git Workflow
+
+This plugin is designed to work with Git-stored vaults. On disk, only ciphertext exists — safe to commit and push.
+
+### Initial setup
+
+```bash
+# Clone the vault
+git clone git@github.com:your-org/team-vault.git
+cd team-vault
+
+# Open in Obsidian, configure the plugin with your KMS key ARN
+# Ensure AWS credentials are available:
+aws sts get-caller-identity
+```
+
+### Daily workflow
+
+```bash
+# Pull latest changes (encrypted on disk)
+cd /path/to/vault
+git pull
+
+# Open Obsidian — plugin decrypts blocks transparently
+# Edit notes as usual — secret blocks show decrypted content
+# Close Obsidian or just switch to terminal
+
+# Commit and push (only ciphertext goes to Git)
+git add -A
+git status          # verify: no plaintext in diff
+git commit -m "update finance Q3 notes"
+git push
+```
+
+### Verifying no plaintext leaks to Git
+
+```bash
+# Check what's actually in the file on disk:
+cat notes/budget.md
+# You should see: ````ocke-v1\n<base64>...```` — NOT plaintext
+
+# Check diff before committing:
+git diff --cached
+# Encrypted blocks show as base64 changes, not readable text
+
+# For binary files:
+file attachments/report.pdf
+# Should show: "data" (not "PDF document") — it's encrypted bytes
+```
+
+### Team onboarding
+
+```bash
+# New team member:
+# 1. Clone the vault
+git clone git@github.com:your-org/team-vault.git
+
+# 2. Configure AWS credentials
+aws configure
+# or: aws sso login --profile team
+
+# 3. Install plugin in Obsidian, set the same KMS key ARN
+# 4. IAM admin grants kms:Decrypt permission on the relevant key(s)
+
+# 5. Open vault in Obsidian — blocks they have access to are decrypted
+#    Blocks they DON'T have access to remain as encrypted base64
+```
+
+### Conflict resolution
+
+```bash
+# If Git shows merge conflict in an encrypted block:
+# DON'T try to merge the base64 manually — it's binary data
+
+# Option 1: Accept theirs or ours
+git checkout --theirs notes/budget.md
+# or
+git checkout --ours notes/budget.md
+
+# Option 2: Re-encrypt after resolving in Obsidian
+# 1. Accept one version
+# 2. Open in Obsidian, edit the decrypted content
+# 3. Save — plugin re-encrypts with new DEK
+# 4. Commit
+```
+
+### .gitignore recommendations
+
+```gitignore
+# Obsidian workspace (contains open file state, not secrets)
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+
+# Plugin data (contains your KMS ARN — not secret, but personal)
+.obsidian/plugins/obsidian-cloud-kms-encryption/data.json
+
+# Never ignore these (they ARE the encrypted vault):
+# !*.md
+# !attachments/
 ```
 
 ## Development
