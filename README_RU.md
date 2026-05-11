@@ -31,6 +31,7 @@
   - [Пользователь из того же AWS-аккаунта](#пользователь-из-того-же-aws-аккаунта)
   - [Пользователь из той же AWS Organization](#пользователь-из-той-же-aws-organization-другой-аккаунт)
   - [Пользователь из сторонней организации](#пользователь-из-сторонней-организации-внешний-aws-аккаунт)
+- [CLI-расшифровка (без Obsidian)](#cli-расшифровка-без-obsidian)
 - [Сравнение с альтернативами](#сравнение-с-альтернативами)
 - [Работа с Git](#работа-с-git)
 - [Development](#development)
@@ -368,6 +369,71 @@ git checkout --ours notes/budget.md
 # !*.md
 # !attachments/
 ```
+
+## CLI-расшифровка (без Obsidian)
+
+Для disaster recovery, CI/CD пайплайнов или проверки бэкапов — можно расшифровать файлы без Obsidian через CLI.
+
+> **Важно:** Encryption context (`vault-name` и `file-path`) должен совпадать с тем, что использовался при шифровании. Vault name — это имя папки вашего Obsidian vault. File path — путь относительно корня vault (например, `folder/note.md`).
+
+### Вариант 1: Bash + AWS CLI + Python
+
+Без Node.js. Требуется: `aws` CLI, `python3`, `pip install cryptography`.
+
+```bash
+# Расшифровать бинарный файл (PDF, изображение)
+./tools/ocke-decrypt.sh report.pdf --vault-name my-vault --file-path report.pdf -o decrypted-report.pdf
+
+# Расшифровать markdown-блоки (вывод в stdout)
+./tools/ocke-decrypt.sh notes/secret.md --vault-name my-vault --file-path notes/secret.md
+
+# Через переменные окружения
+OCKE_VAULT_NAME="my-vault" OCKE_FILE_PATH="notes/secret.md" ./tools/ocke-decrypt.sh notes/secret.md -o decrypted.md
+```
+
+### Вариант 2: Node.js CLI
+
+Требуется: Node.js >= 18, `@aws-sdk/client-kms`.
+
+```bash
+# Установить зависимости (один раз)
+npm install @aws-sdk/client-kms @aws-sdk/credential-provider-ini
+
+# Расшифровать бинарный файл
+node tools/ocke-decrypt.mjs report.pdf --vault-name my-vault --file-path report.pdf -o decrypted-report.pdf
+
+# Расшифровать markdown-блоки
+node tools/ocke-decrypt.mjs notes/secret.md --vault-name my-vault --file-path notes/secret.md
+
+# Через переменные окружения
+OCKE_VAULT_NAME="my-vault" OCKE_FILE_PATH="notes/secret.md" node tools/ocke-decrypt.mjs notes/secret.md -o decrypted.md
+```
+
+### Параметры
+
+| Параметр | Описание | Обязательный |
+|----------|----------|--------------|
+| `<file>` | Путь к зашифрованному файлу | Да |
+| `-o <output>` | Записать результат в файл (по умолчанию: stdout) | Нет |
+| `--vault-name` | Имя Obsidian vault (имя папки) | Да |
+| `--file-path` | Путь файла относительно корня vault (как при шифровании) | Да |
+
+Или через переменные окружения: `OCKE_VAULT_NAME`, `OCKE_FILE_PATH`.
+
+> **Как узнать правильные значения:**
+> - `vault-name` — имя папки vault (например, если vault в `/home/user/my-vault/`, имя — `my-vault`)
+> - `file-path` — путь относительно корня vault (например, `notes/secret.md`, `attachments/report.pdf`)
+
+### Когда использовать CLI
+
+- **Disaster recovery** — Obsidian недоступен, нужен доступ к зашифрованным данным
+- **CI/CD пайплайны** — расшифровка секретов при деплое без GUI
+- **Проверка бэкапов** — убедиться что зашифрованные бэкапы валидны
+- **Миграция** — массовая расшифровка при переходе с плагина
+
+> **Примечание:** На Windows используйте Git Bash или WSL для корректной работы с Unicode-путями.
+> Оба инструмента используют те же AWS credentials что и плагин (`~/.aws/credentials`).
+> ARN ключа хранится внутри зашифрованных данных — конфигурация ключа не нужна.
 
 ## Development
 

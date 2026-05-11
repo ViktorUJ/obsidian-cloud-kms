@@ -31,6 +31,7 @@ An [Obsidian](https://obsidian.md) plugin providing **transparent encryption** o
   - [User from the same AWS account](#user-from-the-same-aws-account)
   - [User from the same AWS Organization](#user-from-the-same-aws-organization-different-account)
   - [User from an external organization](#user-from-an-external-organization-external-aws-account)
+- [CLI Decryption (without Obsidian)](#cli-decryption-without-obsidian)
 - [Comparison with Alternatives](#comparison-with-alternatives)
 - [Git Workflow](#git-workflow)
 - [Development](#development)
@@ -546,6 +547,71 @@ git checkout --ours notes/budget.md
 # !*.md
 # !attachments/
 ```
+
+## CLI Decryption (without Obsidian)
+
+For disaster recovery, CI/CD pipelines, or backup verification — you can decrypt files without Obsidian using CLI tools.
+
+> **Important:** Encryption context (`vault-name` and `file-path`) must match what was used during encryption. The vault name is the folder name of your Obsidian vault. The file path is vault-relative (e.g., `folder/note.md`).
+
+### Option 1: Bash + AWS CLI + Python
+
+Zero Node.js dependencies. Requires: `aws` CLI, `python3`, `pip install cryptography`.
+
+```bash
+# Decrypt a binary file (PDF, image)
+./tools/ocke-decrypt.sh report.pdf --vault-name my-vault --file-path report.pdf -o decrypted-report.pdf
+
+# Decrypt markdown blocks (prints to stdout)
+./tools/ocke-decrypt.sh notes/secret.md --vault-name my-vault --file-path notes/secret.md
+
+# Using environment variables
+OCKE_VAULT_NAME="my-vault" OCKE_FILE_PATH="notes/secret.md" ./tools/ocke-decrypt.sh notes/secret.md -o decrypted.md
+```
+
+### Option 2: Node.js CLI
+
+Requires: Node.js >= 18, `@aws-sdk/client-kms`.
+
+```bash
+# Install dependencies (one time)
+npm install @aws-sdk/client-kms @aws-sdk/credential-provider-ini
+
+# Decrypt a binary file
+node tools/ocke-decrypt.mjs report.pdf --vault-name my-vault --file-path report.pdf -o decrypted-report.pdf
+
+# Decrypt markdown blocks
+node tools/ocke-decrypt.mjs notes/secret.md --vault-name my-vault --file-path notes/secret.md
+
+# Using environment variables
+OCKE_VAULT_NAME="my-vault" OCKE_FILE_PATH="notes/secret.md" node tools/ocke-decrypt.mjs notes/secret.md -o decrypted.md
+```
+
+### Parameters
+
+| Parameter | Description | Required |
+|-----------|-------------|----------|
+| `<file>` | Path to the encrypted file | Yes |
+| `-o <output>` | Write output to file (default: stdout) | No |
+| `--vault-name` | Obsidian vault name (folder name) | Yes |
+| `--file-path` | Vault-relative file path used during encryption | Yes |
+
+Or via environment variables: `OCKE_VAULT_NAME`, `OCKE_FILE_PATH`.
+
+> **How to find the correct values:**
+> - `vault-name` — the folder name of your vault (e.g., if vault is at `/home/user/my-vault/`, the name is `my-vault`)
+> - `file-path` — the path relative to vault root (e.g., `notes/secret.md`, `attachments/report.pdf`)
+
+### When to use CLI
+
+- **Disaster recovery** — Obsidian is unavailable, need to access encrypted data
+- **CI/CD pipelines** — decrypt secrets during deployment without GUI
+- **Backup verification** — confirm encrypted backups are valid
+- **Migration** — bulk decrypt when moving away from the plugin
+
+> **Note:** On Windows, use Git Bash or WSL for correct Unicode file path handling.
+> Both tools use the same AWS credentials as the plugin (`~/.aws/credentials`).
+> The KMS key ARN is stored inside the encrypted data — no key configuration needed.
 
 ## Development
 
