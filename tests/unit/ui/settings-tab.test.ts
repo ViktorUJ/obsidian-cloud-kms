@@ -93,6 +93,8 @@ describe("loadSettings", () => {
   it("preserves all stored fields", async () => {
     const stored: PluginSettings = {
       awsCmkArn: "arn:aws:kms:eu-west-1:999888777666:key/my-key",
+      keys: [{ alias: "finance", arn: "arn:aws:kms:eu-west-1:999888777666:key/my-key" }],
+      defaultKeyAlias: "finance",
       encryptedNoteSuffix: ".encrypted.md",
       autoDecryptBlocks: true,
       providers: [{ providerId: "aws-kms", enabled: true, cmkId: "test" }],

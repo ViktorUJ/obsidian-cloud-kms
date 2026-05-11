@@ -151,16 +151,28 @@ export interface EncryptedFileRecord {
  * Plugin settings data model.
  */
 export interface PluginSettings {
-  // Phase 1
+  // Primary key (backward compat)
   awsCmkArn: string;
 
-  // Phase 2
+  // Multi-key support
+  keys: KeyConfig[];
+  defaultKeyAlias: string;
+
+  // Behavior
   encryptedNoteSuffix: string;
   autoDecryptBlocks: boolean;
 
-  // Phase 3
+  // Phase 3 (future)
   providers: ProviderConfig[];
   vaultPolicies: EncryptedVaultPolicy[];
+}
+
+/**
+ * Named KMS key configuration.
+ */
+export interface KeyConfig {
+  alias: string;
+  arn: string;
 }
 
 /**

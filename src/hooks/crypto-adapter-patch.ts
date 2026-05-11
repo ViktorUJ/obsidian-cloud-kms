@@ -22,16 +22,17 @@ import { serialize } from '../format/serializer';
 import { FORMAT_VERSION } from '../constants';
 import { PluginError } from '../providers/errors';
 import { showErrorNotice } from '../ui/notices';
+import { resolveKeyArn } from '../utils/key-resolver';
 
 /**
  * Markers for secret blocks.
- * Uses Obsidian comment syntax (%%) which is invisible in Reading view.
- * Content between markers is regular markdown — renders normally (mermaid, code, etc.)
+ * Supports optional alias: %%secret-start:alias%% or %%secret-start%%
+ * Content between markers is regular markdown — renders normally.
  *
- * Editor shows:   %%secret-start%% ... %%secret-end%%
+ * Editor shows:   %%secret-start:finance%% ... %%secret-end%%
  * Disk stores:    ````ocke-v1\n<base64>\n````
  */
-const SECRET_BLOCK_REGEX = /%%secret-start%%\n([\s\S]*?)\n%%secret-end%%/g;
+const SECRET_BLOCK_REGEX = /%%secret-start(?::([a-zA-Z0-9_-]+))?%%\n([\s\S]*?)\n%%secret-end%%/g;
 const ENCRYPTED_BLOCK_REGEX = /````ocke-v1\n([\s\S]*?)\n````/g;
 
 /** Tracks paths currently being processed to prevent re-entrancy */
@@ -200,25 +201,22 @@ export function installCryptoAdapterPatch(
       return (originalWrite as any)(normalizedPath, data, ...args);
     }
 
-    // Check for ````secret blocks
+    // Check for secret blocks (%%secret-start%% or %%secret-start:alias%%)
     SECRET_BLOCK_REGEX.lastIndex = 0;
     if (!SECRET_BLOCK_REGEX.test(data)) {
       return (originalWrite as any)(normalizedPath, data, ...args);
     }
 
     const settings = getSettings();
-    if (!settings.awsCmkArn || settings.awsCmkArn.trim() === '') {
-      return (originalWrite as any)(normalizedPath, data, ...args);
-    }
 
     processing.add(normalizedPath);
     try {
-      // Encrypt all ````secret blocks → ````ocke-v1
+      // Encrypt all secret blocks → ````ocke-v1
       const encrypted = await encryptBlocks(
         data,
         normalizedPath,
         cryptoEngine,
-        settings.awsCmkArn,
+        settings,
         plugin.app.vault.getName()
       );
       return (originalWrite as any)(normalizedPath, encrypted, ...args);
@@ -299,21 +297,22 @@ async function decryptBlocks(
 }
 
 /**
- * Encrypt all ````secret blocks in content → ````ocke-v1 blocks.
+ * Encrypt all secret blocks in content → ````ocke-v1 blocks.
+ * Each block can specify its own key alias via %%secret-start:alias%%
  */
 async function encryptBlocks(
   content: string,
   filePath: string,
   cryptoEngine: CryptoEngine,
-  cmkArn: string,
+  settings: PluginSettings,
   vaultName: string
 ): Promise<string> {
   SECRET_BLOCK_REGEX.lastIndex = 0;
 
-  const matches: Array<{ fullMatch: string; plaintext: string }> = [];
+  const matches: Array<{ fullMatch: string; alias: string | undefined; plaintext: string }> = [];
   let match: RegExpExecArray | null;
   while ((match = SECRET_BLOCK_REGEX.exec(content)) !== null) {
-    matches.push({ fullMatch: match[0], plaintext: match[1] });
+    matches.push({ fullMatch: match[0], alias: match[1], plaintext: match[2] });
   }
 
   if (matches.length === 0) return content;
@@ -321,6 +320,13 @@ async function encryptBlocks(
   let result = content;
 
   for (const m of matches) {
+    // Resolve which key to use for this block
+    const cmkArn = resolveKeyArn(m.alias, settings);
+    if (!cmkArn) {
+      // No key configured for this alias — skip encryption, leave as-is
+      continue;
+    }
+
     const encoder = new TextEncoder();
     const plaintextBytes = encoder.encode(m.plaintext);
 

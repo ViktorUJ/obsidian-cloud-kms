@@ -27,6 +27,7 @@ An [Obsidian](https://obsidian.md) plugin providing **transparent encryption** o
 - [Security](SECURITY.md)
 - [On-Disk Format](#on-disk-format)
 - [Key Access Management](#key-access-management)
+  - [Multi-Key Architecture](#multi-key-architecture)
   - [User from the same AWS account](#user-from-the-same-aws-account)
   - [User from the same AWS Organization](#user-from-the-same-aws-organization-different-account)
   - [User from an external organization](#user-from-an-external-organization-external-aws-account)
@@ -243,6 +244,57 @@ The file is entirely replaced with OCKE binary format:
 ```
 
 ## Key Access Management
+
+### Multi-Key Architecture
+
+In organizations, different teams need access to different secrets. This plugin supports multiple KMS keys, allowing fine-grained access control:
+
+**Use case:** A company vault shared across teams:
+- **Finance team** — access to budget data, salaries, contracts
+- **R&D team** — access to patents, research, technical secrets
+- **CTO** — access to everything (all keys)
+
+Each secret block is encrypted with a specific key. IAM policies on the AWS side control who can decrypt what. A developer from R&D physically cannot decrypt finance data — even if they have access to the vault files.
+
+**Plugin settings:**
+```json
+{
+  "keys": [
+    { "alias": "finance", "arn": "arn:aws:kms:eu-north-1:790660747904:key/aaa-111" },
+    { "alias": "rnd", "arn": "arn:aws:kms:eu-north-1:790660747904:key/bbb-222" },
+    { "alias": "cto", "arn": "arn:aws:kms:eu-north-1:790660747904:key/ccc-333" }
+  ],
+  "defaultKeyAlias": "finance"
+}
+```
+
+**In notes — specify key alias in the marker:**
+```markdown
+%%secret-start:finance%%
+Q3 Budget: $2.4M
+Salaries: ...
+%%secret-end%%
+
+%%secret-start:rnd%%
+Patent application for new algorithm: ...
+%%secret-end%%
+
+%%secret-start:cto%%
+Production root credentials: ...
+%%secret-end%%
+```
+
+**Behavior:**
+- When encrypting: if multiple keys are configured, a picker appears to choose which key to use
+- When decrypting: the key ARN is stored inside the encrypted data — the plugin automatically uses it
+- If the user has IAM access to the key → block is decrypted
+- If not → block remains encrypted (graceful degradation)
+- A single note can contain blocks encrypted with different keys
+
+**IAM setup on AWS side:**
+- Finance team → IAM policy allows only `kms:Decrypt` on `key/aaa-111`
+- R&D team → IAM policy allows only `kms:Decrypt` on `key/bbb-222`
+- CTO → IAM policy allows `kms:Decrypt` on all three keys
 
 ### User from the same AWS account
 

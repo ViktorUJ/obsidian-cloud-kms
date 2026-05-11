@@ -21,6 +21,8 @@ const ARN_MAX_LENGTH = 512;
 /** Default plugin settings. */
 export const DEFAULT_SETTINGS: PluginSettings = {
   awsCmkArn: "",
+  keys: [],
+  defaultKeyAlias: "",
   encryptedNoteSuffix: ENCRYPTED_NOTE_SUFFIX_DEFAULT,
   autoDecryptBlocks: true,
   providers: [],
