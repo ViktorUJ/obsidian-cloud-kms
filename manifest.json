@@ -1,7 +1,7 @@
 {
   "id": "obsidian-cloud-kms-encryption",
   "name": "Cloud KMS Encryption",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "minAppVersion": "1.4.0",
   "description": "File-level envelope encryption using Cloud KMS services (AWS KMS, Azure Key Vault, Google Cloud KMS)",
   "author": "obsidian-cloud-kms",
