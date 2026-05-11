@@ -2,7 +2,11 @@
 
 > 🇷🇺 [Документация на русском](README_RU.md)
 
+[![CI](https://github.com/ViktorUJ/obsidian-cloud-kms/actions/workflows/ci.yml/badge.svg)](https://github.com/ViktorUJ/obsidian-cloud-kms/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/ViktorUJ/obsidian-cloud-kms/actions/workflows/codeql.yml/badge.svg)](https://github.com/ViktorUJ/obsidian-cloud-kms/actions/workflows/codeql.yml)
 [![Known Vulnerabilities](https://snyk.io/test/github/ViktorUJ/obsidian-cloud-kms/badge.svg)](https://snyk.io/test/github/ViktorUJ/obsidian-cloud-kms)
+[![SLSA 2](https://slsa.dev/images/gh-badge-level2.svg)](https://slsa.dev)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 An [Obsidian](https://obsidian.md) plugin providing **transparent encryption** of secret blocks and binary files using AWS KMS.
 

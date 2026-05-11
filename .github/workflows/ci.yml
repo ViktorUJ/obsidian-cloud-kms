@@ -8,6 +8,8 @@ on:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 jobs:
   check:
@@ -89,6 +91,13 @@ jobs:
       - name: Build release
         run: make release
 
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          artifact-name: sbom.spdx.json
+          format: spdx-json
+          output-file: dist/sbom.spdx.json
+
       - name: Create/update release
         uses: softprops/action-gh-release@v2
         with:
@@ -98,4 +107,28 @@ jobs:
           files: |
             dist/main.js
             dist/manifest.json
+            dist/sbom.spdx.json
           make_latest: true
+
+      - name: Attest build provenance (SLSA)
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: 'dist/main.js'
+
+      - name: Sign artifacts with cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Cosign sign main.js
+        run: |
+          cosign sign-blob dist/main.js \
+            --bundle dist/main.js.bundle \
+            --yes
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+
+      - name: Upload signature to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.bump.outputs.version }}
+          files: |
+            dist/main.js.bundle
