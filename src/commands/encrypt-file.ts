@@ -29,13 +29,14 @@ import { markFileEncrypted } from '../ui/file-explorer-badge';
 export function registerEncryptFileCommand(
   plugin: Plugin,
   cryptoEngine: CryptoEngine,
-  getSettings: () => PluginSettings
+  getSettings: () => PluginSettings,
+  getOriginalReadBinary: () => ((path: string) => Promise<ArrayBuffer>) | undefined
 ): void {
   plugin.addCommand({
     id: 'encrypt-current-file-aws-kms',
     name: 'Encrypt current file with AWS KMS',
     callback: () => {
-      executeEncryptFile(plugin, cryptoEngine, getSettings).catch(() => {});
+      executeEncryptFile(plugin, cryptoEngine, getSettings, getOriginalReadBinary).catch(() => {});
     },
   });
 }
@@ -43,7 +44,8 @@ export function registerEncryptFileCommand(
 async function executeEncryptFile(
   plugin: Plugin,
   cryptoEngine: CryptoEngine,
-  getSettings: () => PluginSettings
+  getSettings: () => PluginSettings,
+  getOriginalReadBinary: () => ((path: string) => Promise<ArrayBuffer>) | undefined
 ): Promise<void> {
   const file = plugin.app.workspace.getActiveFile();
   if (!file) {
@@ -68,8 +70,14 @@ async function executeEncryptFile(
   }
 
   try {
-    // Read binary content
-    const contentBuffer = await plugin.app.vault.readBinary(file);
+    // Read raw binary bypassing our decrypt patch
+    const originalRead = getOriginalReadBinary();
+    if (!originalRead) {
+      new Notice('Plugin not fully initialized', NOTICE_DURATION_MS);
+      return;
+    }
+
+    const contentBuffer = await originalRead(file.path);
     const contentBytes = new Uint8Array(contentBuffer);
 
     // Check if already encrypted (OCKE magic bytes)

@@ -51,7 +51,7 @@ export default class CloudKmsPlugin extends Plugin {
     // 6. Register commands
     registerEncryptSelectionCommand(this, this.cryptoEngine, () => this.settings);
     registerDecryptSelectionCommand(this, this.cryptoEngine, () => this.settings);
-    registerEncryptFileCommand(this, this.cryptoEngine, () => this.settings);
+    registerEncryptFileCommand(this, this.cryptoEngine, () => this.settings, () => this.originalReadBinary);
     registerDecryptFileCommand(this, this.cryptoEngine, () => this.settings, () => this.originalReadBinary);
 
     // 7. Install crypto adapter patch (transparent encrypt/decrypt)
