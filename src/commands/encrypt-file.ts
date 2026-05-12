@@ -6,7 +6,7 @@
  * The file name does NOT change. The content is replaced with OCKE binary format.
  */
 
-import { Notice, Plugin, FuzzySuggestModal } from 'obsidian';
+import { App, Notice, Plugin, FuzzySuggestModal } from 'obsidian';
 import type { CryptoEngine, EncryptionContext, PluginSettings } from '../types';
 import { FORMAT_VERSION, KMS_FILE_TIMEOUT_MS, NOTICE_DURATION_MS } from '../constants';
 import { serialize } from '../format/serializer';
@@ -82,13 +82,13 @@ async function executeEncryptFile(
     await doEncrypt(plugin, cryptoEngine, file.path, contentBytes, arn);
   } else {
     // Multiple keys — show picker
-    new KeyPickerModal(plugin.app, aliases, async (chosen) => {
+    new KeyPickerModal(plugin.app, aliases, (chosen) => {
       const arn = resolveKeyArn(chosen, settings);
       if (!arn) {
         new Notice(`Key "${chosen}" has no valid ARN.`, NOTICE_DURATION_MS);
         return;
       }
-      await doEncrypt(plugin, cryptoEngine, file.path, contentBytes, arn);
+      void doEncrypt(plugin, cryptoEngine, file.path, contentBytes, arn);
     }).open();
   }
 }
@@ -141,7 +141,7 @@ class KeyPickerModal extends FuzzySuggestModal<string> {
   private readonly aliases: string[];
   private readonly onChoose: (alias: string) => void;
 
-  constructor(app: any, aliases: string[], onChoose: (alias: string) => void) {
+  constructor(app: App, aliases: string[], onChoose: (alias: string) => void) {
     super(app);
     this.aliases = aliases;
     this.onChoose = onChoose;

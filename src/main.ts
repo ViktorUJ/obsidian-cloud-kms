@@ -69,7 +69,7 @@ export default class CloudKmsPlugin extends Plugin {
     registerAttachmentHook(this, this.cryptoEngine, () => this.settings, this.bufferRegistry);
 
     // 9. File explorer badge for encrypted files
-    this.uninstallBadge = installFileExplorerBadge(this, this.originalReadBinary!);
+    this.uninstallBadge = installFileExplorerBadge(this, this.originalReadBinary);
 
     // 10. Status bar KMS indicator
     this.uninstallStatusBar = installStatusBar(this, () => this.settings);
@@ -78,7 +78,7 @@ export default class CloudKmsPlugin extends Plugin {
     registerEncryptedFileView(this);
   }
 
-  async onunload(): Promise<void> {
+  onunload(): void {
     // Restore original adapter methods
     if (this.uninstallAdapterPatch) {
       this.uninstallAdapterPatch();

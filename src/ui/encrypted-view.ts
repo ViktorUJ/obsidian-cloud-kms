@@ -10,7 +10,7 @@
  * or ciphertext integrity verification fails.
  */
 
-import { ItemView, Plugin, WorkspaceLeaf } from 'obsidian';
+import { ItemView, Plugin, WorkspaceLeaf, ViewStateResult } from 'obsidian';
 
 /** Unique view type identifier for the encrypted file read-only view. */
 export const ENCRYPTED_FILE_VIEW_TYPE = 'encrypted-file-view';
@@ -79,7 +79,7 @@ export class EncryptedFileView extends ItemView {
     };
   }
 
-  async setState(state: Partial<EncryptedFileViewState>, result: any): Promise<void> {
+  async setState(state: Partial<EncryptedFileViewState>, result: ViewStateResult): Promise<void> {
     if (state.filePath !== undefined) this.filePath = state.filePath;
     if (state.errorMessage !== undefined) this.errorMessage = state.errorMessage;
     if (state.rawContentBase64 !== undefined) this.rawContentBase64 = state.rawContentBase64;
@@ -191,8 +191,8 @@ export async function showEncryptedFileError(
 ): Promise<void> {
   // Build error message with category if available (PluginError)
   let errorMessage: string;
-  if ('category' in error && typeof (error as any).category === 'string') {
-    errorMessage = `[${(error as any).category}] ${error.message}`;
+  if ('category' in error && typeof (error as Record<string, unknown>).category === 'string') {
+    errorMessage = `[${(error as Record<string, unknown>).category}] ${error.message}`;
   } else {
     errorMessage = error.message || 'Decryption failed';
   }

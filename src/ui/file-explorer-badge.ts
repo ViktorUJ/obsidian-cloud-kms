@@ -10,7 +10,7 @@ const encryptedPaths = new Set<string>();
 
 export function installFileExplorerBadge(
   plugin: Plugin,
-  originalReadBinary: (path: string) => Promise<ArrayBuffer>
+  originalReadBinary: ((path: string) => Promise<ArrayBuffer>) | undefined
 ): () => void {
   // Scan vault on layout ready
   plugin.app.workspace.onLayoutReady(async () => {
@@ -40,8 +40,9 @@ export function markFileDecrypted(filePath: string): void {
 
 async function scanVaultForEncryptedFiles(
   plugin: Plugin,
-  originalReadBinary: (path: string) => Promise<ArrayBuffer>
+  originalReadBinary: ((path: string) => Promise<ArrayBuffer>) | undefined
 ): Promise<void> {
+  if (!originalReadBinary) return;
   const files = plugin.app.vault.getFiles();
   for (const file of files) {
     if (file.path.endsWith('.md')) continue;

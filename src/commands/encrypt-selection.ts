@@ -6,7 +6,7 @@
  * The actual encryption happens transparently via the adapter patch on save.
  */
 
-import { Notice, Plugin, MarkdownView, FuzzySuggestModal } from 'obsidian';
+import { App, Editor, Notice, Plugin, MarkdownView, FuzzySuggestModal } from 'obsidian';
 import type { CryptoEngine, PluginSettings } from '../types';
 import { MAX_SELECTION_CHARS, NOTICE_DURATION_MS } from '../constants';
 import { getKeyAliases } from '../utils/key-resolver';
@@ -37,7 +37,7 @@ function executeWrapSelection(plugin: Plugin, getSettings: () => PluginSettings)
     return;
   }
 
-  const editor = markdownView.editor;
+  const editor: Editor = markdownView.editor;
   const selection = editor.getSelection();
 
   if (!selection || selection.length === 0) {
@@ -68,7 +68,7 @@ function executeWrapSelection(plugin: Plugin, getSettings: () => PluginSettings)
   }
 }
 
-function wrapWithAlias(editor: any, selection: string, alias: string | undefined): void {
+function wrapWithAlias(editor: Editor, selection: string, alias: string | undefined): void {
   const startMarker = alias ? `%%secret-start:${alias}%%` : '%%secret-start%%';
   const secretBlock = `${startMarker}\n${selection}\n%%secret-end%%`;
   editor.replaceSelection(secretBlock);
@@ -81,7 +81,7 @@ class KeyPickerModal extends FuzzySuggestModal<string> {
   private readonly aliases: string[];
   private readonly onChoose: (alias: string) => void;
 
-  constructor(app: any, aliases: string[], onChoose: (alias: string) => void) {
+  constructor(app: App, aliases: string[], onChoose: (alias: string) => void) {
     super(app);
     this.aliases = aliases;
     this.onChoose = onChoose;

@@ -68,7 +68,7 @@ export function installStatusBar(
 
   // Check on click only (no periodic background checks)
   statusBarEl.addEventListener('click', () => {
-    checkStatus();
+    void checkStatus();
   });
 
   // Initial check after layout ready
