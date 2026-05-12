@@ -55,22 +55,20 @@ export class CloudKmsSettingsTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
-    containerEl.createEl("h2", { text: "Cloud KMS Encryption Settings" });
+    new Setting(containerEl).setName("Cloud KMS Encryption Settings").setHeading();
 
     // --- Keys section ---
-    containerEl.createEl("h3", { text: "Encryption Keys" });
+    new Setting(containerEl).setName("Encryption Keys").setHeading();
     containerEl.createEl("p", {
       text: "Add KMS keys with aliases. Use aliases in %%secret-start:alias%% markers. The default key is used when no alias is specified.",
       cls: "setting-item-description",
     });
 
     this.addKeysSection(containerEl);
-
-    // --- Default key ---
     this.addDefaultKeySetting(containerEl);
 
-    // --- Legacy single key (backward compat) ---
-    containerEl.createEl("h3", { text: "Legacy Settings" });
+    // --- Legacy ---
+    new Setting(containerEl).setName("Legacy Settings").setHeading();
     containerEl.createEl("p", {
       text: "Used as fallback if no keys are configured above.",
       cls: "setting-item-description",
@@ -78,7 +76,7 @@ export class CloudKmsSettingsTab extends PluginSettingTab {
     this.addArnSetting(containerEl);
 
     // --- Behavior ---
-    containerEl.createEl("h3", { text: "Behavior" });
+    new Setting(containerEl).setName("Behavior").setHeading();
     this.addAutoDecryptBlocksSetting(containerEl);
   }
 
@@ -112,7 +110,7 @@ export class CloudKmsSettingsTab extends PluginSettingTab {
             this.plugin.settings.keys[index].alias = value.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
             await this.plugin.saveData(this.plugin.settings);
           });
-        text.inputEl.style.width = "120px";
+        text.inputEl.addClass('ocke-input-alias');
       })
       .addText((text) => {
         text
@@ -122,7 +120,7 @@ export class CloudKmsSettingsTab extends PluginSettingTab {
             this.plugin.settings.keys[index].arn = value.slice(0, ARN_MAX_LENGTH);
             await this.plugin.saveData(this.plugin.settings);
           });
-        text.inputEl.style.width = "300px";
+        text.inputEl.addClass('ocke-input-arn');
       })
       .addButton((btn) => {
         btn.setButtonText("✕").setWarning().onClick(async () => {
@@ -138,12 +136,10 @@ export class CloudKmsSettingsTab extends PluginSettingTab {
 
     // Validation
     if (key.arn && !validateAwsKmsArn(key.arn).valid) {
-      const errorEl = setting.controlEl.createEl("div", {
+      setting.controlEl.createEl("div", {
         text: "Invalid ARN format",
-        cls: "setting-error-message",
+        cls: "ocke-setting-error",
       });
-      errorEl.style.color = "var(--text-error)";
-      errorEl.style.fontSize = "0.8em";
     }
   }
 
@@ -185,18 +181,15 @@ export class CloudKmsSettingsTab extends PluginSettingTab {
             if (stripped.length > 0 && !validateAwsKmsArn(stripped).valid) {
               errorEl = setting.controlEl.createEl("div", {
                 text: "Invalid AWS KMS key ARN format",
-                cls: "setting-error-message",
+                cls: "ocke-setting-error",
               });
-              errorEl.style.color = "var(--text-error)";
-              errorEl.style.fontSize = "0.85em";
-              errorEl.style.marginTop = "4px";
             }
 
             this.plugin.settings.awsCmkArn = clamped;
             await this.plugin.saveData(this.plugin.settings);
           });
         text.inputEl.maxLength = ARN_MAX_LENGTH;
-        text.inputEl.style.width = "100%";
+        text.inputEl.addClass('ocke-input-wide');
       });
   }
 

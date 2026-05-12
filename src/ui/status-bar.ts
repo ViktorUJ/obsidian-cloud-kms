@@ -46,21 +46,22 @@ export function installStatusBar(
   };
 
   const setStatus = (status: 'ok' | 'error' | 'checking', detail: string) => {
+    statusBarEl.removeClass('ocke-status-bar--ok', 'ocke-status-bar--error', 'ocke-status-bar--checking');
     switch (status) {
       case 'ok':
         statusBarEl.setText('🔓 KMS');
         statusBarEl.setAttribute('title', 'KMS connection OK — encryption/decryption available');
-        statusBarEl.style.color = '';
+        statusBarEl.addClass('ocke-status-bar--ok');
         break;
       case 'error':
         statusBarEl.setText('🔒 KMS ⚠️');
         statusBarEl.setAttribute('title', `KMS unavailable: ${detail}\nSecret blocks will NOT be encrypted on save!`);
-        statusBarEl.style.color = 'var(--text-error)';
+        statusBarEl.addClass('ocke-status-bar--error');
         break;
       case 'checking':
         statusBarEl.setText('⏳ KMS');
         statusBarEl.setAttribute('title', 'Checking KMS connection...');
-        statusBarEl.style.color = 'var(--text-muted)';
+        statusBarEl.addClass('ocke-status-bar--checking');
         break;
     }
   };
@@ -72,7 +73,7 @@ export function installStatusBar(
 
   // Initial check after layout ready
   plugin.app.workspace.onLayoutReady(() => {
-    setTimeout(checkStatus, 2000);
+    window.setTimeout(checkStatus, 2000);
   });
 
   return () => {

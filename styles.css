@@ -1,0 +1,121 @@
+/* Cloud KMS Encryption Plugin Styles */
+
+/* Secret block processor & widget */
+.ocke-secret-block {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  margin: 4px 0;
+  overflow: hidden;
+}
+
+.ocke-secret-block-header {
+  padding: 4px 8px;
+  font-size: 0.8em;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ocke-secret-block-header--decrypted {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+.ocke-secret-block-header--locked {
+  background: var(--background-modifier-error);
+  color: var(--text-error);
+}
+
+.ocke-secret-block-header--loading {
+  background: var(--background-modifier-border);
+  color: var(--text-muted);
+}
+
+.ocke-secret-block-content {
+  padding: 8px;
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--font-monospace);
+  font-size: 0.9em;
+  background: var(--background-secondary);
+}
+
+.ocke-secret-block-content--locked {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* Encrypted file view */
+.ocke-encrypted-view-banner {
+  background-color: var(--background-modifier-error);
+  color: var(--text-on-accent);
+  padding: 12px 16px;
+  border-radius: 4px;
+  margin-bottom: 16px;
+  font-weight: 600;
+}
+
+.ocke-encrypted-view-banner-detail {
+  margin-top: 4px;
+  font-weight: 400;
+  font-size: 0.9em;
+}
+
+.ocke-encrypted-view-heading {
+  margin-bottom: 8px;
+}
+
+.ocke-encrypted-view-code {
+  white-space: pre-wrap;
+  word-break: break-all;
+  padding: 12px;
+  background-color: var(--background-secondary);
+  border-radius: 4px;
+  font-size: 0.85em;
+  font-family: var(--font-monospace);
+  max-height: 70vh;
+  overflow: auto;
+  user-select: text;
+}
+
+/* File explorer badge */
+.nav-file.ocke-encrypted-file .nav-file-title-content::after {
+  content: ' 🔒';
+  font-size: 0.8em;
+  opacity: 0.7;
+}
+
+/* Settings errors */
+.ocke-setting-error {
+  color: var(--text-error);
+  font-size: 0.85em;
+  margin-top: 4px;
+}
+
+/* Status bar */
+.ocke-status-bar--ok {
+  color: var(--text-normal);
+}
+
+.ocke-status-bar--error {
+  color: var(--text-error);
+}
+
+.ocke-status-bar--checking {
+  color: var(--text-muted);
+}
+
+/* Settings inputs */
+.ocke-input-alias {
+  width: 120px;
+}
+
+.ocke-input-arn {
+  width: 300px;
+}
+
+.ocke-input-wide {
+  width: 100%;
+}

@@ -96,15 +96,7 @@ export class EncryptedFileView extends ItemView {
     container.empty();
 
     // Error banner
-    const banner = container.createEl('div', {
-      cls: 'encrypted-view-error-banner',
-    });
-    banner.style.backgroundColor = 'var(--background-modifier-error)';
-    banner.style.color = 'var(--text-on-accent)';
-    banner.style.padding = '12px 16px';
-    banner.style.borderRadius = '4px';
-    banner.style.marginBottom = '16px';
-    banner.style.fontWeight = '600';
+    const banner = container.createEl('div', { cls: 'ocke-encrypted-view-banner' });
 
     const errorIcon = banner.createEl('span');
     errorIcon.textContent = '⚠ ';
@@ -113,36 +105,17 @@ export class EncryptedFileView extends ItemView {
     errorText.textContent = this.errorMessage || 'Decryption failed';
 
     if (this.filePath) {
-      const fileInfo = banner.createEl('div');
-      fileInfo.style.marginTop = '4px';
-      fileInfo.style.fontWeight = '400';
-      fileInfo.style.fontSize = '0.9em';
+      const fileInfo = banner.createEl('div', { cls: 'ocke-encrypted-view-banner-detail' });
       fileInfo.textContent = `File: ${this.filePath}`;
     }
 
     // Raw content section
-    const contentSection = container.createEl('div', {
-      cls: 'encrypted-view-content',
-    });
+    const contentSection = container.createEl('div');
 
-    const heading = contentSection.createEl('h4');
+    const heading = contentSection.createEl('h4', { cls: 'ocke-encrypted-view-heading' });
     heading.textContent = 'Raw On-Disk Content (Base64)';
-    heading.style.marginBottom = '8px';
 
-    const codeBlock = contentSection.createEl('pre', {
-      cls: 'encrypted-view-raw-content',
-    });
-    codeBlock.style.whiteSpace = 'pre-wrap';
-    codeBlock.style.wordBreak = 'break-all';
-    codeBlock.style.padding = '12px';
-    codeBlock.style.backgroundColor = 'var(--background-secondary)';
-    codeBlock.style.borderRadius = '4px';
-    codeBlock.style.fontSize = '0.85em';
-    codeBlock.style.fontFamily = 'var(--font-monospace)';
-    codeBlock.style.maxHeight = '70vh';
-    codeBlock.style.overflow = 'auto';
-    codeBlock.style.userSelect = 'text';
-
+    const codeBlock = contentSection.createEl('pre', { cls: 'ocke-encrypted-view-code' });
     const code = codeBlock.createEl('code');
     code.textContent = this.rawContentBase64 || '(no content)';
   }
