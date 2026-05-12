@@ -55,10 +55,8 @@ export class CloudKmsSettingsTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
-    new Setting(containerEl).setName("Cloud KMS Encryption Settings").setHeading();
-
     // --- Keys section ---
-    new Setting(containerEl).setName("Encryption Keys").setHeading();
+    new Setting(containerEl).setName("Keys").setHeading();
     containerEl.createEl("p", {
       text: "Add KMS keys with aliases. Use aliases in %%secret-start:alias%% markers. The default key is used when no alias is specified.",
       cls: "setting-item-description",
@@ -68,7 +66,7 @@ export class CloudKmsSettingsTab extends PluginSettingTab {
     this.addDefaultKeySetting(containerEl);
 
     // --- Legacy ---
-    new Setting(containerEl).setName("Legacy Settings").setHeading();
+    new Setting(containerEl).setName("Legacy").setHeading();
     containerEl.createEl("p", {
       text: "Used as fallback if no keys are configured above.",
       cls: "setting-item-description",

@@ -18,17 +18,14 @@ export function installFileExplorerBadge(
     applyBadges();
   });
 
-  // Re-apply badges periodically
-  const interval = window.setInterval(() => {
-    applyBadges();
-  }, 3000);
-
-  plugin.register(() => {
-    window.clearInterval(interval);
-  });
+  // Re-apply badges when file explorer updates (on file-open events)
+  plugin.registerEvent(
+    plugin.app.workspace.on('file-open', () => {
+      applyBadges();
+    })
+  );
 
   return () => {
-    window.clearInterval(interval);
     removeBadges();
   };
 }
