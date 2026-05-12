@@ -178,8 +178,8 @@ For **permanent** decryption (write plaintext back to disk):
 ### From GitHub Releases
 
 1. Go to [Releases](https://github.com/ViktorUJ/obsidian-cloud-kms/releases)
-2. Download from the latest release: `main.js`, `manifest.json`
-3. Create folder `.obsidian/plugins/obsidian-cloud-kms-encryption/` in your vault
+2. Download from the latest release: `main.js`, `manifest.json`, `styles.css`
+3. Create folder `.obsidian/plugins/cloud-kms-encryption/` in your vault
 4. Place downloaded files in that folder
 5. Restart Obsidian → Settings → Community Plugins → enable "Cloud KMS Encryption"
 
@@ -192,7 +192,7 @@ npm install
 npm run build
 ```
 
-Copy `main.js` and `manifest.json` to `.obsidian/plugins/obsidian-cloud-kms-encryption/`.
+Copy `main.js`, `manifest.json`, and `styles.css` to `.obsidian/plugins/cloud-kms-encryption/`.
 
 ### AWS Setup
 

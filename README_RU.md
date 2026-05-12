@@ -178,8 +178,8 @@ aws s3 cp secret.tar.gz s3://my-bucket/
 ### Из GitHub Releases
 
 1. Перейдите в [Releases](https://github.com/ViktorUJ/obsidian-cloud-kms/releases)
-2. Скачайте из последнего релиза: `main.js`, `manifest.json`
-3. Создайте папку `.obsidian/plugins/obsidian-cloud-kms-encryption/` в вашем хранилище
+2. Скачайте из последнего релиза: `main.js`, `manifest.json`, `styles.css`
+3. Создайте папку `.obsidian/plugins/cloud-kms-encryption/` в вашем хранилище
 4. Положите скачанные файлы в эту папку
 5. Перезапустите Obsidian → Settings → Community Plugins → включите "Cloud KMS Encryption"
 
@@ -192,7 +192,7 @@ npm install
 npm run build
 ```
 
-Скопируйте `main.js` и `manifest.json` в `.obsidian/plugins/obsidian-cloud-kms-encryption/`.
+Скопируйте `main.js`, `manifest.json` и `styles.css` в `.obsidian/plugins/cloud-kms-encryption/`.
 
 ### Настройка AWS
 
