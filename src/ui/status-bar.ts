@@ -17,8 +17,6 @@ import type { PluginSettings } from '../types';
 import { AwsKmsAdapter } from '../providers/aws-kms-adapter';
 import { resolveKeyArn } from '../utils/key-resolver';
 
-const CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
-
 export function installStatusBar(
   plugin: Plugin,
   getSettings: () => PluginSettings
@@ -26,8 +24,6 @@ export function installStatusBar(
   const statusBarEl = plugin.addStatusBarItem();
   statusBarEl.addClass('ocke-status-bar');
   statusBarEl.setText('⏳ KMS ...');
-
-  let intervalId: number | null = null;
 
   const checkStatus = async () => {
     const settings = getSettings();
@@ -69,7 +65,7 @@ export function installStatusBar(
     }
   };
 
-  // Click to re-check
+  // Check on click only (no periodic background checks)
   statusBarEl.addEventListener('click', () => {
     checkStatus();
   });
@@ -79,14 +75,7 @@ export function installStatusBar(
     setTimeout(checkStatus, 2000);
   });
 
-  // Periodic check
-  intervalId = window.setInterval(checkStatus, CHECK_INTERVAL_MS);
-  plugin.register(() => {
-    if (intervalId !== null) window.clearInterval(intervalId);
-  });
-
   return () => {
-    if (intervalId !== null) window.clearInterval(intervalId);
     statusBarEl.remove();
   };
 }
