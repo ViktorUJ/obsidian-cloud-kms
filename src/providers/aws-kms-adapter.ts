@@ -203,7 +203,7 @@ export class AwsKmsAdapter implements ProviderAdapter {
     context: EncryptionContext
   ): Promise<GenerateDataKeyResult> {
     const abortController = new AbortController();
-    const timeout = setTimeout(() => abortController.abort(), this.timeoutMs);
+    const timeout = window.setTimeout(() => abortController.abort(), this.timeoutMs);
 
     try {
       const command = new GenerateDataKeyCommand({
@@ -232,7 +232,7 @@ export class AwsKmsAdapter implements ProviderAdapter {
     } catch (err) {
       throw mapAwsError(err, cmkId);
     } finally {
-      clearTimeout(timeout);
+      window.clearTimeout(timeout);
     }
   }
 
@@ -245,7 +245,7 @@ export class AwsKmsAdapter implements ProviderAdapter {
     context: EncryptionContext
   ): Promise<Uint8Array> {
     const abortController = new AbortController();
-    const timeout = setTimeout(() => abortController.abort(), this.timeoutMs);
+    const timeout = window.setTimeout(() => abortController.abort(), this.timeoutMs);
 
     try {
       const command = new EncryptCommand({
@@ -271,7 +271,7 @@ export class AwsKmsAdapter implements ProviderAdapter {
     } catch (err) {
       throw mapAwsError(err, cmkId);
     } finally {
-      clearTimeout(timeout);
+      window.clearTimeout(timeout);
     }
   }
 
@@ -285,7 +285,7 @@ export class AwsKmsAdapter implements ProviderAdapter {
     context: EncryptionContext
   ): Promise<Uint8Array> {
     const abortController = new AbortController();
-    const timeout = setTimeout(() => abortController.abort(), this.timeoutMs);
+    const timeout = window.setTimeout(() => abortController.abort(), this.timeoutMs);
 
     try {
       const command = new DecryptCommand({
@@ -321,7 +321,7 @@ export class AwsKmsAdapter implements ProviderAdapter {
     } catch (err) {
       throw mapAwsError(err, cmkId);
     } finally {
-      clearTimeout(timeout);
+      window.clearTimeout(timeout);
     }
   }
 
@@ -331,7 +331,7 @@ export class AwsKmsAdapter implements ProviderAdapter {
    */
   async validateAccess(cmkId: string): Promise<void> {
     const abortController = new AbortController();
-    const timeout = setTimeout(() => abortController.abort(), this.timeoutMs);
+    const timeout = window.setTimeout(() => abortController.abort(), this.timeoutMs);
 
     try {
       const command = new DescribeKeyCommand({
@@ -344,7 +344,7 @@ export class AwsKmsAdapter implements ProviderAdapter {
     } catch (err) {
       throw mapAwsError(err, cmkId);
     } finally {
-      clearTimeout(timeout);
+      window.clearTimeout(timeout);
     }
   }
 }

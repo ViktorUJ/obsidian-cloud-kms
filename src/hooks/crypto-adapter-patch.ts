@@ -134,11 +134,11 @@ export function installCryptoAdapterPatch(
 
       // Wait for decryption to complete (poll)
       for (let i = 0; i < 50; i++) {
-        await new Promise(r => setTimeout(r, 100));
+        await new Promise(r => window.setTimeout(r, 100));
         const url = blobUrls.get(file.path);
         if (url && url !== '__pending__') {
           // Force re-render by triggering a leaf update
-          const leaf = plugin.app.workspace.activeLeaf;
+          const leaf = plugin.app.workspace.getLeaf();
           if (leaf) {
             const state = leaf.getViewState();
             await leaf.setViewState({ type: 'empty', state: {} });

@@ -88,13 +88,13 @@ async function executeDecryptFile(
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => {
+    const timer = window.setTimeout(() => {
       reject(new Error(`KMS operation timed out after ${timeoutMs}ms`));
     }, timeoutMs);
 
     promise.then(
-      (value) => { clearTimeout(timer); resolve(value); },
-      (err) => { clearTimeout(timer); reject(err); }
+      (value) => { window.clearTimeout(timer); resolve(value); },
+      (err) => { window.clearTimeout(timer); reject(err); }
     );
   });
 }

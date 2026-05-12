@@ -32,7 +32,7 @@ export function registerInlineBlockOpenHook(
     if (matchesEncryptedSuffix(activeFile.name, settings.encryptedNoteSuffix)) return;
 
     // Find the active markdown editor
-    const activeLeaf = plugin.app.workspace.activeLeaf;
+    const activeLeaf = plugin.app.workspace.getLeaf();
     if (!activeLeaf) return;
 
     const view = activeLeaf.view;
@@ -113,5 +113,5 @@ export function registerInlineBlockOpenHook(
 }
 
 function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise(resolve => window.setTimeout(resolve, ms));
 }

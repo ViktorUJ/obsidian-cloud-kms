@@ -32,7 +32,7 @@ export interface AttachmentBlobEntry {
   /** Number of views currently referencing this Blob URL */
   refCount: number;
   /** Timeout handle for delayed cleanup (5s after last view closes) */
-  cleanupTimer: ReturnType<typeof setTimeout> | null;
+  cleanupTimer: number | null;
 }
 
 /** Delay before revoking Blob URL after last view closes (ms) */
@@ -76,7 +76,7 @@ export class AttachmentBlobRegistry {
   revokeAll(): void {
     for (const [, entry] of this._entries) {
       if (entry.cleanupTimer !== null) {
-        clearTimeout(entry.cleanupTimer);
+        window.clearTimeout(entry.cleanupTimer);
       }
       try {
         URL.revokeObjectURL(entry.blobUrl);
@@ -184,7 +184,7 @@ export function addViewReference(
 
   // Cancel any pending cleanup since a new view is referencing this
   if (entry.cleanupTimer !== null) {
-    clearTimeout(entry.cleanupTimer);
+    window.clearTimeout(entry.cleanupTimer);
     entry.cleanupTimer = null;
   }
 }
@@ -209,7 +209,7 @@ export function removeViewReference(
 
   if (entry.refCount === 0) {
     // Schedule cleanup after delay
-    entry.cleanupTimer = setTimeout(() => {
+    entry.cleanupTimer = window.setTimeout(() => {
       cleanupBlobEntry(registry, filePath);
     }, BLOB_CLEANUP_DELAY_MS);
   }
@@ -230,7 +230,7 @@ export function cleanupBlobEntry(
 
   // Cancel any pending timer
   if (entry.cleanupTimer !== null) {
-    clearTimeout(entry.cleanupTimer);
+    window.clearTimeout(entry.cleanupTimer);
     entry.cleanupTimer = null;
   }
 
