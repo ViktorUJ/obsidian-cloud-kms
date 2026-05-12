@@ -1,7 +1,7 @@
 {
   "id": "cloud-kms-encryption",
   "name": "Cloud KMS Encryption",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "minAppVersion": "1.7.2",
   "description": "Transparent encryption of secret blocks and binary files using AWS KMS. Zero plaintext on disk.",
   "author": "Viktar Mikalayeu",

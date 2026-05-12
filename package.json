@@ -1,6 +1,6 @@
 {
   "name": "cloud-kms-encryption",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Obsidian plugin for file-level envelope encryption using Cloud KMS services",
   "main": "main.js",
   "scripts": {
