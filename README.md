@@ -5,7 +5,7 @@
 [![CI](https://github.com/ViktorUJ/obsidian-cloud-kms/actions/workflows/ci.yml/badge.svg)](https://github.com/ViktorUJ/obsidian-cloud-kms/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/ViktorUJ/obsidian-cloud-kms/actions/workflows/codeql.yml/badge.svg)](https://github.com/ViktorUJ/obsidian-cloud-kms/actions/workflows/codeql.yml)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/ViktorUJ/obsidian-cloud-kms/badge)](https://scorecard.dev/viewer/?uri=github.com/ViktorUJ/obsidian-cloud-kms)
-[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/9999/badge)](https://www.bestpractices.dev/projects/9999)
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/12824/badge)](https://www.bestpractices.dev/projects/12824)
 [![Known Vulnerabilities](https://snyk.io/test/github/ViktorUJ/obsidian-cloud-kms/badge.svg)](https://snyk.io/test/github/ViktorUJ/obsidian-cloud-kms)
 [![SLSA 2](https://slsa.dev/images/gh-badge-level2.svg)](https://slsa.dev)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -769,3 +769,4 @@ make ci           # Full CI pipeline
 ## License
 
 [MIT](LICENSE) © Viktar Mikalayeu
+
