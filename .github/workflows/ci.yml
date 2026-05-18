@@ -95,7 +95,7 @@ jobs:
           output-file: dist/sbom.spdx.json
 
       - name: Create/update release
-        uses: softprops/action-gh-release@da05d552573ad5aba039eaac05058a918a7bf631 # v2.2.2
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
         with:
           tag_name: ${{ steps.bump.outputs.version }}
           name: ${{ steps.bump.outputs.version }}
@@ -124,7 +124,7 @@ jobs:
           COSIGN_EXPERIMENTAL: "1"
 
       - name: Upload signature to release
-        uses: softprops/action-gh-release@da05d552573ad5aba039eaac05058a918a7bf631 # v2.2.2
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
         with:
           tag_name: ${{ steps.bump.outputs.version }}
           files: |
